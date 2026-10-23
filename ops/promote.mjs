@@ -55,32 +55,44 @@ async function verify(build) {
 }
 
 async function swap(build) {
-  const target = path.join('v' + build.replace(/^v/, ''), 'packages', 'dsh-pushbot-app')
+  const target = build.startsWith('v') ? build : 'v' + build
   const tmp = path.join(VERSIONS, `.current.tmp-${process.pid}`)
   await symlink(target, tmp)
   await rename(tmp, CURRENT)
   log('current ->', build)
 }
 
+function runningPids() {
+  try {
+    return execFileSync("pgrep", ["-f", "^[^ ]*node .*lib/bin\\.js --profile pushbot$"], { encoding: "utf8" })
+      .split("\n").map((s) => Number(s.trim())).filter(Boolean)
+  } catch { return [] }
+}
+
+async function stopAll() {
+  const pids = runningPids()
+  if (!pids.length) return
+  log("stopping pids", pids.join(","))
+  for (const pid of pids) { try { process.kill(pid, "SIGTERM") } catch {} }
+  for (let i = 0; i < 50 && runningPids().length; i += 1) await sleep(200)
+  for (const pid of runningPids()) { try { process.kill(pid, "SIGKILL") } catch {} }
+}
+
 async function restart() {
   try {
-    execFileSync('systemctl', ['--user', 'restart', UNIT], { stdio: 'pipe' })
-    log('restarted via systemd')
-    return 'systemd'
+    execFileSync("systemctl", ["--user", "restart", UNIT], { stdio: "pipe" })
+    log("restarted via systemd")
+    return "systemd"
   } catch {
-    const health = await readJson(HEALTH, null)
-    const pid = Number(health?.pid)
-    if (pid) {
-      try { process.kill(pid, 'SIGTERM'); log('sent SIGTERM to pid', pid) } catch {}
-      for (let i = 0; i < 30; i += 1) {
-        try { process.kill(pid, 0) } catch { break }
-        await sleep(200)
-      }
-      try { process.kill(pid, 'SIGKILL') } catch {}
+    await stopAll()
+    try {
+      execFileSync("bash", [path.join(ROOT, "ops", "ensure.sh")], { stdio: "inherit" })
+      log("restarted via ensure.sh")
+      return "ensure.sh"
+    } catch (error) {
+      log("supervisor failed:", error.message)
+      return "ensure.sh-failed"
     }
-    execFileSync('bash', [path.join(ROOT, 'ops', 'ensure.sh')], { stdio: 'inherit' })
-    log('restarted via ensure.sh')
-    return 'ensure.sh'
   }
 }
 
@@ -130,7 +142,7 @@ if (!health) {
   log('health check FAILED; rolling back')
   if (current && current !== target) {
     await swap(current)
-    await restart()
+    await restart().catch((error) => log("rollback restart failed:", error.message))
     await record({ action: 'rollback-after-failure', failed: target, restored: current, manifest })
   }
   await record({ action: 'deploy-failed', target, manifest })

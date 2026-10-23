@@ -6,8 +6,9 @@ PKG="$ROOT/app/packages/dsh-pushbot-app"
 echo "== syntax =="
 node --check "$PKG/lib/core.js"
 node --check "$PKG/lib/index.js"
-node --check "$ROOT/ops/healthcheck.mjs"
-[ -f "$ROOT/ops/promote.mjs" ] && node --check "$ROOT/ops/promote.mjs"
+for script in healthcheck.mjs ensure.mjs promote.mjs; do
+  [ -f "$ROOT/ops/$script" ] && node --check "$ROOT/ops/$script"
+done
 echo "== unit tests =="
 node --test "$PKG"/test/*.test.js
 echo "== CI OK =="

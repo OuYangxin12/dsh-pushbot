@@ -90,9 +90,35 @@ crontab -e
 | GitHub 403 | 匿名 60 次/小时限流；把 `everyMinutes` 调大，或换 `gh api` 代理方案（P1） |
 | 想看某主题状态 | `cat data/state.json`，`seen` 是已推送的条目 id |
 
-## 5. 路线图
+## 5. CI / CD（本地）
+
+**CI**（无网络依赖，约 3 秒）
+
+```bash
+bash ~/pushbot/ops/ci.sh          # 语法检查 + node --test
+```
+
+- 测试在 `app/packages/dsh-pushbot-app/test/*.test.js`，夹具在 `test/fixtures/`
+- 纯逻辑在 `lib/core.js`（`parseFeed` / `stripTags` / `inQuietHours` / `isDue` / `formatDigest`），`lib/index.js` 只做 I/O
+- `git commit` 经 `.git/hooks/pre-commit` 自动跑 CI，不过就提交失败
+
+**CD**
+
+```bash
+bash ~/pushbot/ops/build.sh              # CI + 生成 versions/vNNN（manifest + sha256）
+node ~/pushbot/ops/promote.mjs           # 部署最新构建
+node ~/pushbot/ops/promote.mjs v002      # 部署指定构建
+node ~/pushbot/ops/promote.mjs rollback  # 回滚到上一个构建
+```
+
+流程：校验 sha256 → 原子切换 `versions/current` → 重启 → 等 60 秒内心跳 → 失败自动回滚。
+每次发布记入 `data/deploys.json`；`data/health.json` 的 `build` 字段就是当前生效版本。
+
+**关键教训**：DSH 在插件加载失败时**不会退出**，只打印 warning 后继续跑基座。所以"进程活着"≠"服务正常"——健康门禁只看心跳；`ops/ensure.sh` 同样先查心跳新鲜度，再决定是否杀掉重启。
+
+## 6. 路线图
 
 - **P0（已完成）**：headless 常驻体、RSS+GitHub 源、去重、心跳、webhook 推送、systemd/cron 自愈
 - **P1**：更多源（热搜/关键词搜索/网页选择器）、outbox 重试、`ctx.llm` 摘要、日报聚合
-- **P2**：`versions/` 版本化 + `promote.mjs` 蓝绿发布 + 自动回滚
+- **P2（已完成）**：`versions/` 版本化 + `promote.mjs` 蓝绿发布 + 自动回滚 + 本地 CI
 - **P3**：`pushbot-improver` 创造模式自改进（cordis_inspect + plugin_manager + 门禁 + 人批）
