@@ -1,5 +1,5 @@
 /** Pure helpers for dsh-pushbot: no I/O, no DSH services — unit-testable. */
-import { createHash } from 'node:crypto'
+import { createHash, createHmac } from 'node:crypto'
 
 export function unescapeXml(value = '') {
   return value
@@ -129,6 +129,20 @@ export function normalizePage(html = '') {
     .replace(/[ \t\u00a0]+/g, ' ')
     .replace(/\n{3,}/g, '\n\n')
     .trim()
+}
+
+/** Feishu custom-bot signature: HMAC-SHA256(key = `${timestamp}\n${secret}`, data = '') in base64. */
+export function feishuSign(secret, timestamp) {
+  return createHmac('sha256', `${timestamp}\n${secret}`).update('').digest('base64')
+}
+
+export function buildFeishuBody(text, secret, nowSeconds = Math.floor(Date.now() / 1000)) {
+  const body = { msg_type: 'text', content: { text } }
+  if (secret) {
+    body.timestamp = String(nowSeconds)
+    body.sign = feishuSign(secret, nowSeconds)
+  }
+  return body
 }
 
 export function hashText(text = '') {

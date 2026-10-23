@@ -4,7 +4,7 @@ import { readFileSync } from 'node:fs'
 import { fileURLToPath } from 'node:url'
 import path from 'node:path'
 import {
-  applyFilter, backoffMs, cleanLlmText, fallbackSummary, formatDailyReport, formatDigest,
+  applyFilter, backoffMs, buildFeishuBody, cleanLlmText, fallbackSummary, feishuSign, formatDailyReport, formatDigest,
   hashText, inQuietHours, isDue, minutesOfDay, normalizePage, parseFeed, parseHnSearch,
   sortItems, stripTags,
 } from '../lib/core.js'
@@ -154,4 +154,22 @@ test('formatDailyReport groups by topic and handles empty days', () => {
   assert.match(report, /抓取成功\/失败：5\/1/)
   const empty = formatDailyReport('2026-10-24', [])
   assert.match(empty, /今日没有新内容/)
+})
+
+test('feishu signing matches the documented algorithm', () => {
+  assert.equal(feishuSign('test-secret', '1700000000'), 'mbm4Y4oluIPQ00qlBIhX8vAZ0EKv3nw0LuTb91jPL84=')
+  assert.notEqual(feishuSign('other', '1700000000'), feishuSign('test-secret', '1700000000'))
+  assert.notEqual(feishuSign('test-secret', '1700000001'), feishuSign('test-secret', '1700000000'))
+  assert.match(feishuSign('s', '1'), /^[A-Za-z0-9+/]+=*$/ )
+})
+
+test('buildFeishuBody omits the signature when no secret is set', () => {
+  assert.deepEqual(buildFeishuBody('hi', undefined, 1700000000), { msg_type: 'text', content: { text: 'hi' } })
+})
+
+test('buildFeishuBody signs when a secret is present', () => {
+  const signed = buildFeishuBody('hi', 'test-secret', 1700000000)
+  assert.equal(signed.content.text, 'hi')
+  assert.equal(signed.timestamp, '1700000000')
+  assert.equal(signed.sign, feishuSign('test-secret', '1700000000'))
 })

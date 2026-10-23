@@ -10,8 +10,9 @@
 import { appendFile, mkdir, readFile, rename, writeFile } from 'node:fs/promises'
 import path from 'node:path'
 import os from 'node:os'
+import { createRequire } from 'node:module'
 import {
-  applyFilter, buildSummaryPrompt, cleanLlmText, fallbackSummary, formatDailyReport,
+  applyFilter, buildFeishuBody, buildSummaryPrompt, cleanLlmText, fallbackSummary, formatDailyReport,
   inQuietHours, isDue, sortItems,
 } from './core.js'
 import { dueEntries, emptyOutbox, enqueue, markFailed, markSent, pendingCount } from './outbox.js'
@@ -29,7 +30,7 @@ const HEALTH_PATH = path.join(DATA_DIR, 'health.json')
 const REPORTS_DIR = path.join(DATA_DIR, 'reports')
 const TICK_MS = Number(process.env.PUSHBOT_TICK_MS || 30000)
 const RUN_ONCE = process.env.PUSHBOT_RUN_ONCE === '1'
-const VERSION = '0.2.0'
+const VERSION = createRequire(import.meta.url)('../package.json').version
 const STARTED_AT = new Date().toISOString()
 const HISTORY_MAX = 500
 
@@ -94,7 +95,7 @@ async function notify(notifierId, notifiers, text) {
     const response = await request(notifier.url, {
       method: 'POST',
       headers: { 'content-type': 'application/json' },
-      body: JSON.stringify({ msg_type: 'text', content: { text } }),
+      body: JSON.stringify(buildFeishuBody(text, notifier.secret)),
     })
     const payload = await response.json().catch(() => ({}))
     if (payload.code && payload.code !== 0) throw new Error(`feishu webhook code ${payload.code} ${payload.msg || ''}`)
