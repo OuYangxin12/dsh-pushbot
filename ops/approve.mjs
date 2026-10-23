@@ -55,12 +55,13 @@ async function notifyHuman(text) {
     const body = target.kind === 'feishu-webhook'
       ? { msg_type: 'text', content: { text } }
       : { text }
-    await fetch(target.url, {
+    const response = await fetch(target.url, {
       method: 'POST',
       headers: { 'content-type': 'application/json' },
       body: JSON.stringify(body),
       signal: AbortSignal.timeout(10000),
     })
+    if (!response.ok) throw new Error(`HTTP ${response.status}`)
     log('(approval request pushed)')
   } catch (error) {
     log(`(push failed: ${error.message}; request stored locally)`)
