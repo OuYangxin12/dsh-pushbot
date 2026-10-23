@@ -4,7 +4,7 @@ import { readFileSync } from 'node:fs'
 import { fileURLToPath } from 'node:url'
 import path from 'node:path'
 import {
-  applyFilter, backoffMs, buildFeishuBody, cleanLlmText, fallbackSummary, feishuSign, formatDailyReport, formatDigest,
+  applyFilter, backoffMs, buildDshImBody, buildFeishuBody, cleanLlmText, fallbackSummary, feishuSign, formatDailyReport, formatDigest,
   hashText, inQuietHours, isDue, minutesOfDay, normalizePage, parseFeed, parseHnSearch,
   sortItems, stripTags,
 } from '../lib/core.js'
@@ -172,4 +172,15 @@ test('buildFeishuBody signs when a secret is present', () => {
   assert.equal(signed.content.text, 'hi')
   assert.equal(signed.timestamp, '1700000000')
   assert.equal(signed.sign, feishuSign('test-secret', '1700000000'))
+})
+
+test('buildDshImBody sends markdown by default and omits plain', () => {
+  assert.deepEqual(
+    buildDshImBody('bot_x', 'feishu-alerts', 'hi'),
+    { botId: 'bot_x', targetId: 'feishu-alerts', text: 'hi', format: 'markdown' },
+  )
+  assert.deepEqual(
+    buildDshImBody('bot_x', 'feishu-alerts', 'hi', 'plain'),
+    { botId: 'bot_x', targetId: 'feishu-alerts', text: 'hi' },
+  )
 })

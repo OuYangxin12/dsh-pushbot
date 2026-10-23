@@ -12,7 +12,7 @@ import path from 'node:path'
 import os from 'node:os'
 import { createRequire } from 'node:module'
 import {
-  applyFilter, buildFeishuBody, buildSummaryPrompt, cleanLlmText, fallbackSummary, formatDailyReport,
+  applyFilter, buildDshImBody, buildFeishuBody, buildSummaryPrompt, cleanLlmText, fallbackSummary, formatDailyReport,
   inQuietHours, isDue, sortItems,
 } from './core.js'
 import { dueEntries, emptyOutbox, enqueue, markFailed, markSent, pendingCount } from './outbox.js'
@@ -101,6 +101,23 @@ async function notify(notifierId, notifiers, text) {
     if (payload.code && payload.code !== 0) throw new Error(`feishu webhook code ${payload.code} ${payload.msg || ''}`)
     return
   }
+  // Proactive delivery through the IM bot already connected to the main DSH host.
+  if (notifier.kind === 'dsh-im') {
+    const base = String(notifier.baseUrl || 'http://127.0.0.1:3081').replace(/\/$/, '')
+    const response = await request(`${base}/api/dsh-im/delivery/messages`, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify(buildDshImBody(notifier.botId, notifier.targetId, text, notifier.format)),
+    })
+    const payload = await response.json().catch(() => ({}))
+    if (payload.sent !== true) {
+      const code = payload?.error?.code || 'delivery-failed'
+      const detail = payload?.error?.message || ''
+      throw new Error(`dsh-im ${code}${detail && detail !== code ? ': ' + detail : ''}`)
+    }
+    return
+  }
+
   if (notifier.kind === 'webhook') {
     await request(notifier.url, {
       method: 'POST',

@@ -145,6 +145,13 @@ export function buildFeishuBody(text, secret, nowSeconds = Math.floor(Date.now()
   return body
 }
 
+/** Body accepted by dsh-im's proactive delivery endpoint. */
+export function buildDshImBody(botId, targetId, text, format = 'markdown') {
+  const body = { botId, targetId, text }
+  if (format && format !== 'plain') body.format = format
+  return body
+}
+
 export function hashText(text = '') {
   return createHash('sha256').update(String(text)).digest('hex')
 }

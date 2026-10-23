@@ -4,7 +4,14 @@
       "kind": "file",
       "path": "data/notifications.log"
     },
-    "feishu": {
+    "feishu-agent": {
+      "kind": "dsh-im",
+      "baseUrl": "http://127.0.0.1:3081",
+      "botId": "bot_xxx（用 ops/set-im.mjs 自动填充）",
+      "targetId": "feishu-me",
+      "format": "markdown"
+    },
+    "feishu-group": {
       "kind": "feishu-webhook",
       "url": "https://open.feishu.cn/open-apis/bot/v2/hook/REPLACE_WITH_YOUR_WEBHOOK"
     }
@@ -14,7 +21,7 @@
       "id": "ai-news",
       "name": "AI 资讯",
       "everyMinutes": 30,
-      "notifier": "feishu",
+      "notifier": "feishu-agent",
       "maxItemsPerPush": 6,
       "quietHours": [
         "23:30",
@@ -50,7 +57,7 @@
       "id": "github-dsh",
       "name": "DSH 仓库动态",
       "everyMinutes": 60,
-      "notifier": "feishu",
+      "notifier": "feishu-agent",
       "sources": [
         {
           "kind": "github",
@@ -66,7 +73,7 @@
       "id": "price-watch",
       "name": "商品价格监控",
       "everyMinutes": 60,
-      "notifier": "feishu",
+      "notifier": "feishu-agent",
       "sources": [
         {
           "kind": "page",
