@@ -1,0 +1,24 @@
+[Unit]
+Description=DSH pushbot — resident headless watch & notify service
+Documentation=file:%h/pushbot/README.md
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+Environment=DSH_HOME=%h/pushbot/home
+Environment=PUSHBOT_ROOT=%h/pushbot
+Environment=PUSHBOT_CONFIG=%h/pushbot/config.json
+Environment=PATH=/home/oyx/.nvm/versions/node/v22.19.0/bin:/usr/local/bin:/usr/bin:/bin
+WorkingDirectory=%h/pushbot
+ExecStart=/home/oyx/.nvm/versions/node/v22.19.0/bin/node /home/oyx/.nvm/versions/node/v22.19.0/lib/node_modules/@deepseek-ai/dsh/lib/bin.js --profile pushbot
+Restart=always
+RestartSec=5
+StartLimitIntervalSec=0
+MemoryMax=1G
+TasksMax=512
+StandardOutput=journal
+StandardError=journal
+
+[Install]
+WantedBy=default.target

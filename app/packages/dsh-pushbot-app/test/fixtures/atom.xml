@@ -1,0 +1,11 @@
+<?xml version="1.0" encoding="utf-8"?>
+<feed xmlns="http://www.w3.org/2005/Atom">
+  <title>Feed</title>
+  <entry>
+    <title>Atom entry</title>
+    <link href="https://example.com/atom-1"/>
+    <id>urn:uuid:1</id>
+    <updated>2026-10-23T08:00:00Z</updated>
+    <summary>Atom summary</summary>
+  </entry>
+</feed>

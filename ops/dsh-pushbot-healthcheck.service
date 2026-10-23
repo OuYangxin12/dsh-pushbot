@@ -1,0 +1,9 @@
+[Unit]
+Description=DSH pushbot heartbeat healthcheck
+
+[Service]
+Type=oneshot
+Environment=PUSHBOT_ROOT=%h/pushbot
+Environment=PUSHBOT_CONFIG=%h/pushbot/config.json
+Environment=PUSHBOT_UNIT=dsh-pushbot
+ExecStart=/home/oyx/.nvm/versions/node/v22.19.0/bin/node %h/pushbot/ops/healthcheck.mjs

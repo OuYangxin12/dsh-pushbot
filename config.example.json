@@ -1,0 +1,47 @@
+{
+  "notifiers": {
+    "file": {
+      "kind": "file",
+      "path": "data/notifications.log"
+    },
+    "feishu": {
+      "kind": "feishu-webhook",
+      "url": "https://open.feishu.cn/open-apis/bot/v2/hook/REPLACE_WITH_YOUR_WEBHOOK"
+    }
+  },
+  "topics": [
+    {
+      "id": "ai-news",
+      "name": "AI 资讯",
+      "everyMinutes": 30,
+      "notifier": "file",
+      "quietHours": [
+        "23:30",
+        "07:30"
+      ],
+      "sources": [
+        {
+          "kind": "rss",
+          "url": "https://hnrss.org/frontpage",
+          "limit": 5
+        }
+      ]
+    },
+    {
+      "id": "github-dsh",
+      "name": "DSH 仓库动态",
+      "everyMinutes": 30,
+      "notifier": "file",
+      "sources": [
+        {
+          "kind": "github",
+          "repo": "deepseek-ai/deepseek-harness",
+          "events": [
+            "release"
+          ],
+          "limit": 3
+        }
+      ]
+    }
+  ]
+}

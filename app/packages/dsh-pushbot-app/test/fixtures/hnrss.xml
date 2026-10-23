@@ -1,0 +1,15 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<rss version="2.0"><channel><title>HN</title>
+<item>
+  <title><![CDATA[The same AI request emits 8.5x more CO2]]></title>
+  <link>https://example.com/a</link>
+  <guid isPermaLink="false">https://news.ycombinator.com/item?id=1</guid>
+  <pubDate>Wed, 23 Oct 2026 08:00:00 +0000</pubDate>
+  <description><![CDATA[<p>Some <b>summary</b> text</p>]]></description>
+</item>
+<item>
+  <title>Plain &amp; simple</title>
+  <link>https://example.com/b</link>
+  <guid>tag:example,2026:2</guid>
+</item>
+</channel></rss>

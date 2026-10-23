@@ -1,0 +1,4 @@
+# dsh-pushbot-app: mount the resident watch & notify plugin.
+- insert:
+    - id: pushbot-watch
+      name: 'dsh-pushbot-app'

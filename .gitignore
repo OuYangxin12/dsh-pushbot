@@ -1,0 +1,6 @@
+home/
+data/
+versions/
+node_modules/
+config.json
+*.log
