@@ -82,6 +82,14 @@ bash ~/pushbot/ops/install-service.sh
 systemctl --user status dsh-pushbot
 ```
 
+## 0.1 仓库与开发
+
+- 架构与设计决策：[`docs/architecture.md`](docs/architecture.md)
+- 本地 CI：`bash ops/ci.sh`（53 个用例，无需网络）
+- 安装 git 钩子（提交前自动跑 CI）：`bash ops/install-hooks.sh`
+- 断点与刹车都在 `ops/`，由 `ops/CHECKSUMS` 冻结；改动 `ops/` 会让自改进门禁拒绝发布
+- 服务插件源码在 `app/packages/dsh-pushbot-app/`，只有这里会被夜间自改进修改
+
 ## 1. 抓取源
 
 | kind | 说明 | 关键参数 |

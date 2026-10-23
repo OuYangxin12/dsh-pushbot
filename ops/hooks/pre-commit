@@ -1,0 +1,11 @@
+#!/usr/bin/env bash
+# Blocks commits that fail local CI. Install with: bash ops/install-hooks.sh
+root=$(git rev-parse --show-toplevel)
+out=$(bash "$root/ops/ci.sh" 2>&1)
+status=$?
+if [ $status -ne 0 ]; then
+  echo "$out"
+  echo "ci: FAILED — commit blocked" >&2
+  exit 1
+fi
+echo "ci: ok"

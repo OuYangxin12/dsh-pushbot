@@ -4,5 +4,9 @@
 #   */5 * * * *  $HOME/pushbot/ops/ensure.sh
 set -euo pipefail
 ROOT="${PUSHBOT_ROOT:-$HOME/pushbot}"
-export PUSHBOT_DSH_BIN="${PUSHBOT_DSH_BIN:-/home/oyx/.nvm/versions/node/v22.19.0/lib/node_modules/@deepseek-ai/dsh/lib/bin.js}"
-exec /home/oyx/.nvm/versions/node/v22.19.0/bin/node "$ROOT/ops/ensure.mjs"
+if [ -z "${PUSHBOT_DSH_BIN:-}" ]; then
+  DSH_CMD="$(command -v dsh || true)"
+  [ -n "$DSH_CMD" ] || { echo "ensure: dsh not found on PATH" >&2; exit 1; }
+  export PUSHBOT_DSH_BIN="$(readlink -f "$DSH_CMD")"
+fi
+exec node "$ROOT/ops/ensure.mjs"

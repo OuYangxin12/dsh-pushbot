@@ -9,9 +9,9 @@ Type=simple
 Environment=DSH_HOME=%h/pushbot/home
 Environment=PUSHBOT_ROOT=%h/pushbot
 Environment=PUSHBOT_CONFIG=%h/pushbot/config.json
-Environment=PATH=/home/oyx/.nvm/versions/node/v22.19.0/bin:/usr/local/bin:/usr/bin:/bin
+Environment=PATH=@NODE_DIR@:/usr/local/bin:/usr/bin:/bin
 WorkingDirectory=%h/pushbot
-ExecStart=/home/oyx/.nvm/versions/node/v22.19.0/bin/node /home/oyx/.nvm/versions/node/v22.19.0/lib/node_modules/@deepseek-ai/dsh/lib/bin.js --profile pushbot
+ExecStart=@NODE@ @DSH_BIN@ --profile pushbot
 Restart=always
 RestartSec=5
 StartLimitIntervalSec=0

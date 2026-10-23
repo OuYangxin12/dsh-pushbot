@@ -5,7 +5,7 @@ After=network-online.target
 [Service]
 Type=oneshot
 Environment=PUSHBOT_ROOT=%h/pushbot
-Environment=PATH=/home/oyx/.nvm/versions/node/v22.19.0/bin:/usr/local/bin:/usr/bin:/bin
+Environment=PATH=@NODE_DIR@:/usr/local/bin:/usr/bin:/bin
 WorkingDirectory=%h/pushbot
 ExecStart=/usr/bin/env bash %h/pushbot/ops/improve.sh
 TimeoutStartSec=2400

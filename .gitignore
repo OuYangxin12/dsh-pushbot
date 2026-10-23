@@ -1,6 +1,13 @@
+# DSH runtime home (profiles, sessions, credentials)
 home/
+# runtime state: state.json, outbox.json, health.json, reports, approvals, deploys
 data/
+# immutable release builds
 versions/
-node_modules/
+# proposals written by the nightly improver
+proposals/
+# local configuration holds webhook URLs and bot ids
 config.json
+node_modules/
 *.log
+.DS_Store
