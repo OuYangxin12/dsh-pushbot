@@ -17,7 +17,7 @@ cp -R "$PKG" "$DIR/packages/dsh-pushbot-app"
 rm -rf "$DIR/packages/dsh-pushbot-app/test"
 
 NAME_DIR="$DIR" BUILD_N="$N" PKG_SRC="$PKG" ROOT_DIR="$ROOT" node --input-type=module -e '
-import { readFile, writeFile } from "node:fs/promises"
+import { readFile, readdir, writeFile } from "node:fs/promises"
 import { createHash } from "node:crypto"
 import { execFileSync } from "node:child_process"
 import path from "node:path"
@@ -26,7 +26,8 @@ const root = process.env.ROOT_DIR
 const pkgDir = path.join(dir, "packages/dsh-pushbot-app")
 const pkg = JSON.parse(await readFile(path.join(pkgDir, "package.json"), "utf8"))
 const files = {}
-for (const rel of ["lib/index.js", "lib/core.js"]) {
+for (const name of (await readdir(path.join(pkgDir, "lib"))).sort()) {
+  const rel = "lib/" + name
   const buf = await readFile(path.join(pkgDir, rel))
   files[rel] = createHash("sha256").update(buf).digest("hex")
 }

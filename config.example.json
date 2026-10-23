@@ -14,24 +14,43 @@
       "id": "ai-news",
       "name": "AI 资讯",
       "everyMinutes": 30,
-      "notifier": "file",
+      "notifier": "feishu",
+      "maxItemsPerPush": 6,
       "quietHours": [
         "23:30",
         "07:30"
       ],
+      "filter": {
+        "excludeAny": [
+          "招聘",
+          "实习"
+        ]
+      },
       "sources": [
         {
           "kind": "rss",
           "url": "https://hnrss.org/frontpage",
           "limit": 5
+        },
+        {
+          "kind": "hackernews",
+          "limit": 5,
+          "name": "HN"
+        },
+        {
+          "kind": "hn-search",
+          "query": "deepseek",
+          "limit": 5,
+          "sinceDays": 3,
+          "name": "HN搜索"
         }
       ]
     },
     {
       "id": "github-dsh",
       "name": "DSH 仓库动态",
-      "everyMinutes": 30,
-      "notifier": "file",
+      "everyMinutes": 60,
+      "notifier": "feishu",
       "sources": [
         {
           "kind": "github",
@@ -42,6 +61,34 @@
           "limit": 3
         }
       ]
+    },
+    {
+      "id": "price-watch",
+      "name": "商品价格监控",
+      "everyMinutes": 60,
+      "notifier": "feishu",
+      "sources": [
+        {
+          "kind": "page",
+          "url": "https://example.com/item",
+          "name": "示例商品页",
+          "region": "<main[\\s\\S]*?</main>",
+          "expect": {
+            "contains": "现货"
+          }
+        }
+      ]
     }
-  ]
+  ],
+  "llm": {
+    "enabled": false,
+    "apiKeyEnv": "PUSHBOT_LLM_API_KEY",
+    "baseUrl": "https://api.deepseek.com",
+    "model": "deepseek-chat",
+    "maxCallsPerDay": 20
+  },
+  "dailyReport": {
+    "at": "09:00",
+    "notifier": "feishu"
+  }
 }

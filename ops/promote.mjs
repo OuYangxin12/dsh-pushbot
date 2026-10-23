@@ -102,7 +102,8 @@ async function waitHealthy(sinceIso, timeoutMs = Number(process.env.PUSHBOT_HEAL
   while (Date.now() < deadline) {
     const health = await readJson(HEALTH, null)
     const started = Date.parse(health?.startedAt || 0)
-    if (health?.ok && health.phase !== 'error' && started >= since) return health
+    const settled = health?.phase === 'ok' || health?.phase === 'idle'
+    if (health?.ok && settled && started >= since) return health
     await sleep(1000)
   }
   return null

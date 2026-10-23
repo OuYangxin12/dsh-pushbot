@@ -1,4 +1,5 @@
 /** Pure helpers for dsh-pushbot: no I/O, no DSH services — unit-testable. */
+import { createHash } from 'node:crypto'
 
 export function unescapeXml(value = '') {
   return value
@@ -66,13 +67,171 @@ export function isDue(topicState, topic, now = Date.now()) {
   return now - Number(topicState.lastRunAt || 0) >= intervalMs
 }
 
+/** Newest first when a date exists; otherwise keep the upstream order. */
+export function sortItems(items) {
+  return items
+    .map((item, index) => ({ item, index }))
+    .sort((a, b) => {
+      const da = Date.parse(a.item.date || 0)
+      const db = Date.parse(b.item.date || 0)
+      if (Number.isFinite(da) && Number.isFinite(db) && da !== db) return db - da
+      return a.index - b.index
+    })
+    .map((entry) => entry.item)
+}
+
+function haystack(item) {
+  return `${item.title || ''} ${item.summary || ''}`.toLowerCase()
+}
+
+/** Keyword include/exclude filter; both lists are optional and case-insensitive. */
+export function applyFilter(items, topic = {}) {
+  const filter = topic.filter || {}
+  const include = (filter.includeAny || []).map((s) => String(s).toLowerCase()).filter(Boolean)
+  const exclude = (filter.excludeAny || []).map((s) => String(s).toLowerCase()).filter(Boolean)
+  return items.filter((item) => {
+    const text = haystack(item)
+    if (exclude.some((word) => text.includes(word))) return false
+    if (include.length && !include.some((word) => text.includes(word))) return false
+    return true
+  })
+}
+
 export function formatDigest(topic, items) {
   const max = Number(topic.maxItemsPerPush ?? 8)
   const lines = [`【${topic.name || topic.id}】${items.length} 条新内容`, '']
   items.slice(0, max).forEach((item, index) => {
-    lines.push(`${index + 1}. ${item.title}`)
+    const label = item.source ? `[${item.source}] ` : ''
+    lines.push(`${index + 1}. ${label}${item.title}`)
     if (item.url) lines.push(`   ${item.url}`)
   })
   if (items.length > max) lines.push(`… 另有 ${items.length - max} 条未列出`)
+  return lines.join('\n')
+}
+
+/** Exponential retry delay: 1 min, 2 min, 4 min … capped at 30 min. */
+export function backoffMs(attempts, baseMs = 60000, capMs = 1800000) {
+  const exponent = Math.max(0, Number(attempts || 0) - 1)
+  return Math.min(baseMs * 2 ** exponent, capMs)
+}
+
+/** Drop scripts/styles/comments and collapse whitespace so page diffs are stable. */
+export function normalizePage(html = '') {
+  return String(html)
+    .replace(/<script\b[\s\S]*?<\/script>/gi, ' ')
+    .replace(/<style\b[\s\S]*?<\/style>/gi, ' ')
+    .replace(/<!--[\s\S]*?-->/g, ' ')
+    .replace(/<br\s*\/?>/gi, '\n')
+    .replace(/<\/(p|div|li|tr|h[1-6])>/gi, '\n')
+    .replace(/<[^>]+>/g, ' ')
+    .replace(/&nbsp;/g, ' ')
+    .replace(/&amp;/g, '&')
+    .replace(/[ \t\u00a0]+/g, ' ')
+    .replace(/\n{3,}/g, '\n\n')
+    .trim()
+}
+
+export function hashText(text = '') {
+  return createHash('sha256').update(String(text)).digest('hex')
+}
+
+export function parseHnItem(json, sourceLabel) {
+  if (!json || !json.id || !json.title) return null
+  return {
+    id: `hn:${json.id}`,
+    title: json.title,
+    url: json.url || `https://news.ycombinator.com/item?id=${json.id}`,
+    date: json.time ? new Date(json.time * 1000).toISOString() : undefined,
+    summary: stripTags(String(json.text || '')).slice(0, 200),
+    source: sourceLabel,
+  }
+}
+
+export function parseHnSearch(json, sourceLabel) {
+  const hits = Array.isArray(json?.hits) ? json.hits : []
+  return hits
+    .filter((hit) => hit && (hit.title || hit.story_title))
+    .map((hit) => ({
+      id: `hn-search:${hit.objectID}`,
+      title: hit.title || hit.story_title,
+      url: hit.url || hit.story_url || `https://news.ycombinator.com/item?id=${hit.objectID}`,
+      date: hit.created_at,
+      summary: stripTags(String(hit.comment_text || '')).slice(0, 200),
+      source: sourceLabel,
+    }))
+}
+
+export function parseV2ex(json, sourceLabel) {
+  const rows = Array.isArray(json) ? json : []
+  return rows
+    .filter((row) => row && row.title)
+    .map((row) => ({
+      id: `v2ex:${row.id}`,
+      title: row.title,
+      url: row.url || `https://www.v2ex.com/t/${row.id}`,
+      date: row.created ? new Date(row.created * 1000).toISOString() : undefined,
+      summary: stripTags(String(row.content || '')).slice(0, 200),
+      source: sourceLabel,
+    }))
+}
+
+/** Deterministic digest used when no LLM is configured or the call fails. */
+export function fallbackSummary(topic, items) {
+  return formatDigest(topic, items)
+}
+
+export function buildSummaryPrompt(topic, items) {
+  const lines = items.map((item, index) => {
+    const bits = [`${index + 1}. ${item.title}`]
+    if (item.source) bits.push(`来源: ${item.source}`)
+    if (item.url) bits.push(`链接: ${item.url}`)
+    if (item.summary) bits.push(`摘要: ${item.summary}`)
+    return bits.join(' | ')
+  })
+  return [
+    `你是「${topic.name || topic.id}」主题的情报编辑。下面是本轮新抓到的原始条目：`,
+    ...lines,
+    '',
+    '请输出一段适合手机阅读的中文简报：',
+    '- 只保留真正有信息量的条目，合并同一事件的重复报道',
+    '- 每条一行，格式：· 一句话事实（≤40 字）',
+    '- 最多 8 条，不要编造原文没有的数字或结论',
+    '- 不要输出标题、序号或客套话',
+  ].join('\n')
+}
+
+/** Trim common LLM wrappers so the push body stays clean. */
+export function cleanLlmText(reply = '') {
+  return String(reply)
+    .replace(/^```[a-z]*\n?/i, '')
+    .replace(/```$/i, '')
+    .replace(/^\s*(简报|摘要)\s*[:：]\s*/i, '')
+    .trim()
+    .slice(0, 4000)
+}
+
+export function formatDailyReport(dateKey, entries, stats = {}) {
+  const lines = [`# ${dateKey} 推送日报`, '']
+  lines.push(`- 投递主题数：${stats.topics ?? 0}`)
+  lines.push(`- 新内容条数：${entries.length}`)
+  lines.push(`- 抓取成功/失败：${stats.sourcesOk ?? 0}/${stats.sourcesFailed ?? 0}`)
+  lines.push('')
+  if (!entries.length) {
+    lines.push('今日没有新内容。')
+    return lines.join('\n')
+  }
+  const grouped = new Map()
+  for (const entry of entries) {
+    const key = entry.topic || 'unknown'
+    if (!grouped.has(key)) grouped.set(key, [])
+    grouped.get(key).push(entry)
+  }
+  for (const [topic, rows] of grouped) {
+    lines.push(`## ${topic}（${rows.length}）`)
+    for (const row of rows) {
+      lines.push(`- ${row.title}${row.url ? ` — ${row.url}` : ''}`)
+    }
+    lines.push('')
+  }
   return lines.join('\n')
 }

@@ -1,0 +1,11 @@
+[Unit]
+Description=Run the pushbot self-improvement loop every night
+
+[Timer]
+OnCalendar=*-*-* 03:00:00
+RandomizedDelaySec=20m
+Persistent=true
+Unit=dsh-pushbot-improve.service
+
+[Install]
+WantedBy=timers.target

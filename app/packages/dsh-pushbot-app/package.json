@@ -1,6 +1,6 @@
 {
   "name": "dsh-pushbot-app",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "private": true,
   "type": "module",
   "main": "./lib/index.js",
@@ -15,5 +15,9 @@
     "test": "node --test test/*.test.js",
     "ci": "bash ../../ops/ci.sh"
   },
-  "dsh": { "bundle": { "patch": "./cordis.patch.yml" } }
+  "dsh": {
+    "bundle": {
+      "patch": "./cordis.patch.yml"
+    }
+  }
 }
