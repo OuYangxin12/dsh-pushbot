@@ -29,7 +29,14 @@ fi
 BASE=$(git rev-parse HEAD)
 log "base commit $BASE"
 
-if [ "${PUSHBOT_IMPROVE_DRY_RUN:-0}" != "1" ]; then
+if [ "${PUSHBOT_IMPROVE_DRY_RUN:-0}" = "1" ]; then
+  log "dry run: skipping the improver"
+elif [ -n "${PUSHBOT_IMPROVE_CMD:-}" ]; then
+  # injectable command: lets CI and drills exercise the rest of the loop
+  log "running custom improver command"
+  timeout "${PUSHBOT_IMPROVE_TIMEOUT:-1800}" bash -c "$PUSHBOT_IMPROVE_CMD" >>"$LOG" 2>&1
+  log "custom improver finished with exit $?"
+else
   if [ -z "${DEEPSEEK_API_KEY:-}" ]; then
     log "aborted: DEEPSEEK_API_KEY missing (put it in ~/pushbot/home/improve.env)"
     exit 1
@@ -39,10 +46,7 @@ if [ "${PUSHBOT_IMPROVE_DRY_RUN:-0}" != "1" ]; then
     timeout "${PUSHBOT_IMPROVE_TIMEOUT:-1800}" \
     dsh --profile pushbot-improver "$(cat ops/improve-prompt.md)" >>"$LOG" 2>&1
   log "improver finished with exit $?"
-else
-  log "dry run: skipping the improver"
 fi
-
 HEAD=$(git rev-parse HEAD)
 if [ "$BASE" = "$HEAD" ]; then
   log "no commits produced; nothing to gate"
