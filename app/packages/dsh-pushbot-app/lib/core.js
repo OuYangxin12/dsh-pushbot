@@ -235,6 +235,3 @@ export function formatDailyReport(dateKey, entries, stats = {}) {
   }
   return lines.join('\n')
 }
-
-// gate selftest marker
-export const GATE_SELFTEST = true
