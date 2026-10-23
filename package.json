@@ -1,0 +1,6 @@
+{
+  "name": "dsh-pushbot",
+  "private": true,
+  "type": "module",
+  "description": "Resident headless watch & notify service for DeepSeek Harness"
+}
