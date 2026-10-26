@@ -1,5 +1,7 @@
 # DSH 常驻 · 自改进消息推送服务 · 架构设计 v2（headless）
 
+[返回 README](../README.md) · [文档索引](README.md)
+
 > 已确认的三个决策：**目录 `~/pushbot`** · **分级自治（低风险自动、高风险人批）** · **纯 headless，不要 Web UI**。
 >
 > 2026-10-23　·　目标机：Linux（systemd user）　·　DSH `0.2.1-rc.2`
