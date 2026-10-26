@@ -95,6 +95,15 @@ window.__ModuleLoader__.load({
       'expect.absent': { label: '不能出现', placeholder: '缺货' },
     }
 
+    const CATEGORY_GROUPS = (() => {
+      const groups = new Map()
+      for (const entry of CATALOG) {
+        if (!groups.has(entry.category)) groups.set(entry.category, [])
+        groups.get(entry.category).push(entry)
+      }
+      return [...groups.entries()]
+    })()
+
     const K = {
       clone: (value) => JSON.parse(JSON.stringify(value)),
       setPath: (target, dotted, value) => {
@@ -227,7 +236,6 @@ window.__ModuleLoader__.load({
 
       const notifierIds = useMemo(() => Object.keys(draft?.notifiers || data?.config?.notifiers || {}), [draft, data])
       const sourceKinds = data?.catalog?.sourceKinds || []
-
       if (!data) {
         return h('div', { style: S.page }, h('div', { style: S.sub }, error ? `读取失败：${error}` : '正在读取 pushbot 状态…'))
       }
@@ -245,7 +253,7 @@ window.__ModuleLoader__.load({
           h('div', { style: S.grid(120) },
             h(Metric, { label: '心跳', value: health.phase || '—', color: statusColor(health.phase) }),
             h(Metric, { label: '上次抓取', value: K.agoIso(health.lastCycleAt) }),
-            h(Metric, { label: '投递队列', value: `${data.outbox.pending} / ${data.outbox.dead}`, color: data.outbox.dead ? T.warn : T.text }),
+            h(Metric, { label: '投递队列', value: `${data.outbox?.pending ?? 0} / ${data.outbox?.dead ?? 0}`, color: (data.outbox?.dead ?? 0) ? T.warn : T.text }),
             h(Metric, { label: '源成功/失败', value: `${health.sources?.ok ?? 0} / ${health.sources?.failing ?? 0}`, color: (health.sources?.failing ?? 0) ? T.warn : T.text }),
             h(Metric, { label: '累计投递', value: String(health.deliveries ?? 0) }),
             h(Metric, { label: '内存', value: `${health.rssMb ?? 0} MB` })),
@@ -483,15 +491,6 @@ window.__ModuleLoader__.load({
       ] : []
 
       // ---------- catalog ----------
-      const byCategory = useMemo(() => {
-        const groups = new Map()
-        for (const entry of CATALOG) {
-          if (!groups.has(entry.category)) groups.set(entry.category, [])
-          groups.get(entry.category).push(entry)
-        }
-        return [...groups.entries()]
-      }, [])
-
       const addCatalog = (entry) => {
         if (!draft) return
         const inputs = catalogInputs[entry.id] || {}
@@ -519,7 +518,7 @@ window.__ModuleLoader__.load({
             style: S.select, value: addTarget, onChange: (event) => setAddTarget(event.target.value),
           }, (draft?.topics || []).map((topic) => h('option', { key: topic.id, value: topic.id }, topic.name || topic.id))),
           h('span', { style: S.sub }, '标记为「模板」的需要先填地址/正则')),
-        ...byCategory.map(([category, entries]) => h('div', { key: category, style: S.card },
+        ...CATEGORY_GROUPS.map(([category, entries]) => h('div', { key: category, style: S.card },
           h('div', { style: S.title }, category),
           h('div', { style: { ...S.grid(240), marginTop: 10 } },
             entries.map((entry) => h('div', { key: entry.id, style: S.catCard },
