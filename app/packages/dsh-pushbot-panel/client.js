@@ -372,10 +372,21 @@ window.__ModuleLoader__.load({
               return h('div', { key: sourceIndex, style: S.sourceRow },
                 h('div', { style: S.cardHead },
                   h('span', { style: { fontWeight: 500 } }, `${meta?.label || source.kind} · ${source.kind}`),
-                  h('button', {
-                    style: S.buttonGhost,
-                    onClick: () => edit((cfg) => cfg.topics[topicIndex].sources.splice(sourceIndex, 1)),
-                  }, '移除')),
+                  h('div', { style: S.row({ gap: 10 }) },
+                    h('label', { style: S.row({ gap: 4, cursor: 'pointer' }) },
+                      h('input', {
+                        type: 'checkbox', checked: source.bypassFilter === true,
+                        onChange: (event) => edit((cfg) => {
+                          const target = cfg.topics[topicIndex].sources[sourceIndex]
+                          if (event.target.checked) target.bypassFilter = true
+                          else delete target.bypassFilter
+                        }),
+                      }),
+                      h('span', { style: S.sub }, '不受关键词过滤')),
+                    h('button', {
+                      style: S.buttonGhost,
+                      onClick: () => edit((cfg) => cfg.topics[topicIndex].sources.splice(sourceIndex, 1)),
+                    }, '移除'))),
                 h('div', { style: S.grid(150) },
                   ...fields.map((field) => {
                     const label = FIELD_LABELS[field]?.label || field

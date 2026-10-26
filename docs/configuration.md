@@ -44,7 +44,8 @@
 | `maxItemsPerRun` | `20` | 每轮最多取多少条进入摘要 |
 | `maxItemsPerPush` | `8` | 摘要里最多列多少条 |
 | `quietHours` | — | `["23:30","07:30"]`，跨午夜也可以 |
-| `filter.includeAny` | — | 命中标题或摘要任一关键词才推 |
+| `filter.includeAny` | — | 命中标题或摘要任一关键词才推（一组 OR） |
+| `filter.includeAll` | — | **多组关键词必须全部命中**，组内是 OR，例如 `[[AI 词], [价格词]]` |
 | `filter.excludeAny` | — | 命中任一关键词就丢弃 |
 | `sources` | — | 见下表 |
 
@@ -92,7 +93,12 @@
 - 只给 `url`：内容哈希变化时推一次；**首次只记基线，不推**。
 - 给 `expect`：每次检查断言，不满足就推（例如「现货」消失、「缺货」出现），同一状态只提醒一次。
 
-所有源都支持 `name`，会作为摘要里的 `[标签]` 显示。
+所有源都支持：
+
+| 字段 | 作用 |
+|---|---|
+| `name` | 摘要里的 `[标签]` |
+| `bypassFilter` | `true` 时该源不受 `filter` 约束；网页变更监控必须开，否则"内容有变化"会被关键词过滤掉 |
 
 ## llm（可选）
 
@@ -137,7 +143,9 @@
 | `PUSHBOT_CONFIG` | `$PUSHBOT_ROOT/config.json` | 配置文件路径 |
 | `PUSHBOT_TICK_MS` | `30000` | 调度心跳间隔 |
 | `PUSHBOT_RUN_ONCE` | — | `1` 时跑一轮即退出 |
-| `PUSHBOT_FETCH_TIMEOUT_MS` | `15000` | 单次抓取超时 |
+| `PUSHBOT_FETCH_TIMEOUT_MS` | `20000` | 单次抓取超时 |
+| `PUSHBOT_FETCH_RETRIES` | `2` | **GET** 失败重试次数（POST 不重试，避免重复投递） |
+| `PUSHBOT_RETRY_DELAY_MS` | `500` | 重试线性退避基数 |
 | `FEISHU_APP_SECRET` | — | `feishu-app` 通道的应用密钥 |
 | `GITHUB_TOKEN` | — | 提高 GitHub API 额度 |
 | `PUSHBOT_STARTUP_GRACE_MS` | `120000` | watchdog 启动宽限 |

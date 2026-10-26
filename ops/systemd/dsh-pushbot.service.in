@@ -11,6 +11,8 @@ Environment=DSH_HOME=%h/pushbot/home
 Environment=PUSHBOT_ROOT=%h/pushbot
 Environment=PUSHBOT_CONFIG=%h/pushbot/config.json
 EnvironmentFile=-%h/pushbot/home/feishu.env
+EnvironmentFile=-%h/pushbot/home/llm.env
+EnvironmentFile=-%h/pushbot/home/github.env
 Environment=PATH=@NODE_DIR@:/usr/local/bin:/usr/bin:/bin
 WorkingDirectory=%h/pushbot
 ExecStart=@NODE@ @DSH_BIN@ --profile pushbot

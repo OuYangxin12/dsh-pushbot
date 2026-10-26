@@ -219,11 +219,14 @@ export function apply(ctx) {
               now: nowMs(),
             })
             if (result.state) topicState.sources[key] = result.state
-            collected.push(...result.items)
+            // A page monitor reports "content changed"; keyword filters would
+            // throw that away, so such a source can opt out explicitly.
+            collected.push(...(source.bypassFilter === true ? result.items : applyFilter(result.items, topic)))
             runtime.sourcesOk += 1
           } catch (error) {
             runtime.sourcesFailed += 1
-            log(`source failed topic=${topic.id} kind=${source.kind}: ${error.message}`)
+            const where = source.url || source.repo || source.query || source.board || ''
+            log(`source failed topic=${topic.id} kind=${source.kind} ${where}: ${error.message}`)
           }
         }
 
@@ -232,7 +235,7 @@ export function apply(ctx) {
         topicState.seen = [...seen, ...unseen.map((item) => item.id)].slice(-1000)
         topicState.lastRunAt = nowMs()
 
-        const fresh = sortItems(applyFilter(unseen, topic)).slice(0, Number(topic.maxItemsPerRun ?? 20))
+        const fresh = sortItems(unseen).slice(0, Number(topic.maxItemsPerRun ?? 20))
         if (!fresh.length) continue
 
         freshTotal += fresh.length

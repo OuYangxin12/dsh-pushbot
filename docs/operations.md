@@ -27,6 +27,17 @@ bash ~/pushbot/ops/run-once.sh                 # 立刻跑一轮
 | 改进没生效 | `data/improve.log` 的 gate verdict；`data/improvements.json` 的 `reasons` |
 | 想看门禁为什么拒绝 | `node ops/gate.mjs --diff-base <ref> --json` 的 `reasons` |
 
+## 网络抖动
+
+国内到部分站点（openai.com、api.github.com、Hugging Face）会间歇性不可达。服务已经做了两件事：
+
+- **GET 自动重试**：默认 2 次，线性退避（`PUSHBOT_FETCH_RETRIES` / `PUSHBOT_RETRY_DELAY_MS`）
+- **POST 不重试**：投递的重复风险由 outbox 的幂等语义控制
+
+GitHub API 匿名额度只有 60 次/小时，多源 + 重试很容易打满（表现为 `HTTP 403`）。
+把 token 写进 `home/github.env`（`GITHUB_TOKEN=...`）后额度升到 5000/小时，
+systemd 通过 `EnvironmentFile` 自动加载。
+
 ## 常见处置
 
 **某个来源一直失败**：先确认地址可达（`curl -sS <url> | head`），再决定停用或改 `everyMinutes`。

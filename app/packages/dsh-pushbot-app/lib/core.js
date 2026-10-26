@@ -107,15 +107,23 @@ function haystack(item) {
   return `${item.title || ''} ${item.summary || ''}`.toLowerCase()
 }
 
-/** Keyword include/exclude filter; both lists are optional and case-insensitive. */
+/**
+ * Keyword filter. `includeAny` is one OR-group, `includeAll` is a list of
+ * OR-groups that must *all* match (e.g. [AI words] AND [price words]).
+ */
 export function applyFilter(items, topic = {}) {
   const filter = topic.filter || {}
-  const include = (filter.includeAny || []).map((s) => String(s).toLowerCase()).filter(Boolean)
-  const exclude = (filter.excludeAny || []).map((s) => String(s).toLowerCase()).filter(Boolean)
+  const toWords = (value) => (Array.isArray(value) ? value : [])
+    .map((word) => String(word).toLowerCase()).filter(Boolean)
+  const include = toWords(filter.includeAny)
+  const exclude = toWords(filter.excludeAny)
+  const includeAll = (Array.isArray(filter.includeAll) ? filter.includeAll : [])
+    .map(toWords).filter((group) => group.length)
   return items.filter((item) => {
     const text = haystack(item)
     if (exclude.some((word) => text.includes(word))) return false
     if (include.length && !include.some((word) => text.includes(word))) return false
+    if (includeAll.length && !includeAll.every((group) => group.some((word) => text.includes(word)))) return false
     return true
   })
 }

@@ -206,3 +206,27 @@ test('tokenFresh expires one minute early', () => {
   assert.equal(tokenFresh(now + 59000, now), false)
   assert.equal(tokenFresh(0, now), false)
 })
+
+test('applyFilter includeAll requires every group to match', () => {
+  const items = [
+    { title: 'OpenAI API 降价 50%' },
+    { title: 'OpenAI 发布新模型' },
+    { title: '手机价格下调' },
+  ]
+  const topic = { filter: { includeAll: [['openai', 'claude', 'api'], ['降价', 'pricing', '价格']] } }
+  const kept = applyFilter(items, topic)
+  assert.equal(kept.length, 1)
+  assert.match(kept[0].title, /降价/)
+})
+
+test('applyFilter combines includeAny, includeAll and excludeAny', () => {
+  const items = [
+    { title: 'DeepSeek API 计费调整' },
+    { title: 'DeepSeek 招聘公告' },
+    { title: 'DeepSeek 新论文' },
+  ]
+  const kept = applyFilter(items, {
+    filter: { includeAny: ['deepseek'], includeAll: [['计费', 'billing', 'pricing']], excludeAny: ['招聘'] },
+  })
+  assert.deepEqual(kept.map((item) => item.title), ['DeepSeek API 计费调整'])
+})

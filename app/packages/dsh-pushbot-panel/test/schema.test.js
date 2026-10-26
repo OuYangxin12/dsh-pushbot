@@ -114,3 +114,15 @@ test('every advertised source kind is documented in the schema', () => {
     assert.ok(SOURCE_KINDS[kind], `missing ${kind}`)
   }
 })
+
+test('includeAll groups survive a panel save', () => {
+  const { errors, config } = validateConfig(draft({
+    topics: [{
+      id: 't', name: 'T', sources: [{ kind: 'v2ex' }],
+      filter: { includeAll: [['ai', '模型'], ['降价', 'pricing']], excludeAny: ['招聘'] },
+    }],
+  }), { previous })
+  assert.deepEqual(errors, [])
+  assert.deepEqual(config.topics[0].filter.includeAll, [['ai', '模型'], ['降价', 'pricing']])
+  assert.deepEqual(config.topics[0].filter.excludeAny, ['招聘'])
+})

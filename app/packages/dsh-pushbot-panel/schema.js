@@ -73,6 +73,7 @@ function normaliseSource(raw) {
   for (const required of REQUIRED_SOURCE_FIELDS[kind] || []) {
     if (!source[required]) return null
   }
+  if (raw.bypassFilter === true) source.bypassFilter = true
   return source
 }
 
@@ -82,8 +83,14 @@ function normaliseFilter(raw) {
     .map((word) => str(word, 40)).filter(Boolean).slice(0, 20)
   const includeAny = list(raw.includeAny)
   const excludeAny = list(raw.excludeAny)
-  if (!includeAny.length && !excludeAny.length) return undefined
-  return { ...(includeAny.length ? { includeAny } : {}), ...(excludeAny.length ? { excludeAny } : {}) }
+  const includeAll = (Array.isArray(raw.includeAll) ? raw.includeAll : [])
+    .map(list).filter((group) => group.length).slice(0, 5)
+  if (!includeAny.length && !excludeAny.length && !includeAll.length) return undefined
+  return {
+    ...(includeAny.length ? { includeAny } : {}),
+    ...(includeAll.length ? { includeAll } : {}),
+    ...(excludeAny.length ? { excludeAny } : {}),
+  }
 }
 
 function normaliseQuietHours(raw) {
