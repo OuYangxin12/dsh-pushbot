@@ -3,18 +3,19 @@ Description=DSH pushbot — resident headless watch & notify service
 Documentation=file:%h/pushbot/README.md
 After=network-online.target
 Wants=network-online.target
+StartLimitIntervalSec=0
 
 [Service]
 Type=simple
 Environment=DSH_HOME=%h/pushbot/home
 Environment=PUSHBOT_ROOT=%h/pushbot
 Environment=PUSHBOT_CONFIG=%h/pushbot/config.json
+EnvironmentFile=-%h/pushbot/home/feishu.env
 Environment=PATH=@NODE_DIR@:/usr/local/bin:/usr/bin:/bin
 WorkingDirectory=%h/pushbot
 ExecStart=@NODE@ @DSH_BIN@ --profile pushbot
 Restart=always
 RestartSec=5
-StartLimitIntervalSec=0
 MemoryMax=1G
 TasksMax=512
 StandardOutput=journal

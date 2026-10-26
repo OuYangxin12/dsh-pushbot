@@ -4,9 +4,9 @@ import { readFileSync } from 'node:fs'
 import { fileURLToPath } from 'node:url'
 import path from 'node:path'
 import {
-  applyFilter, backoffMs, buildDshImBody, buildFeishuBody, cleanLlmText, fallbackSummary, feishuSign, formatDailyReport, formatDigest,
+  applyFilter, backoffMs, buildDshImBody, buildFeishuAppPayload, buildFeishuBody, cleanLlmText, fallbackSummary, feishuSign, formatDailyReport, formatDigest,
   hashText, inQuietHours, isDue, minutesOfDay, normalizePage, parseFeed, parseHnSearch,
-  sortItems, stripTags,
+  sortItems, stripTags, tokenFresh,
 } from '../lib/core.js'
 
 const here = path.dirname(fileURLToPath(import.meta.url))
@@ -183,4 +183,26 @@ test('buildDshImBody sends markdown by default and omits plain', () => {
     buildDshImBody('bot_x', 'feishu-alerts', 'hi', 'plain'),
     { botId: 'bot_x', targetId: 'feishu-alerts', text: 'hi' },
   )
+})
+
+test('buildFeishuAppPayload renders markdown as an interactive card', () => {
+  const markdown = buildFeishuAppPayload('**粗体**\n- 一条', 'markdown')
+  assert.equal(markdown.msg_type, 'interactive')
+  const card = JSON.parse(markdown.content)
+  assert.equal(card.config.wide_screen_mode, true)
+  assert.equal(card.elements[0].text.tag, 'lark_md')
+  assert.equal(card.elements[0].text.content, '**粗体**\n- 一条')
+})
+
+test('buildFeishuAppPayload keeps plain text as text', () => {
+  const plain = buildFeishuAppPayload('hi', 'plain')
+  assert.equal(plain.msg_type, 'text')
+  assert.deepEqual(JSON.parse(plain.content), { text: 'hi' })
+})
+
+test('tokenFresh expires one minute early', () => {
+  const now = 1_000_000
+  assert.equal(tokenFresh(now + 61000, now), true)
+  assert.equal(tokenFresh(now + 59000, now), false)
+  assert.equal(tokenFresh(0, now), false)
 })

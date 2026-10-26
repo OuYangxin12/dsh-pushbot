@@ -405,3 +405,25 @@ DSH_HOME=~/pushbot/home dsh --profile pushbot-improver "$(cat ~/pushbot/ops/impr
   这是有意的：门禁代码不能自我修改。
 - 改进器的效果依赖隔离 `DSH_HOME` 里的凭据；未配置 `home/improve.env` 时定时器不会启用。
 - 沙箱内无法安装 systemd 单元，常驻与夜间定时仍需用户在普通终端执行一次 `install-service.sh`。
+
+## 14. 落地运行（2026-10-26）
+
+服务已在目标机完成安装并常驻运行，部署路径与实测结果：
+
+| 项 | 结果 |
+|---|---|
+| systemd user 服务 | `dsh-pushbot.service` enabled + active，`NRestarts=0`，无监听端口（headless 验证） |
+| 心跳 watchdog | `dsh-pushbot-healthcheck.timer` 每分钟；新增 2 分钟启动宽限，避免刚启动就被重启 |
+| 自改进定时 | `dsh-pushbot-improve.timer` 每天 03:00；凭据走 `home/improve.env`（0600） |
+| 推送通道 | **飞书应用直连**：复用 DSH 中已接入的智能体身份，服务自己换 `tenant_access_token` 并调 `im/v1/messages` |
+| 凭据落位 | `home/feishu.env` 由 systemd `EnvironmentFile` 注入，不进 `config.json`、不进 git |
+| 实测投递 | 运行中的服务在 30 秒内完成一轮并通过该通道投递成功（`deliveries=1`，`outboxPending=0`） |
+
+**为什么放弃"群 webhook / dsh-im 目标"两种接法**：
+- 群 webhook 是另一个机器人对象，不是用户已有的那个可对话智能体；
+- dsh-im 的主动投递需要先创建 deliveryTarget，而目标是**运行中主机的内存态**，
+  通过 RPC 创建，没有 HTTP 接口；写配置文件不会热加载（源码确认无文件监听）。
+- 应用直连同时满足三点：同一个智能体、无需在主 DSH 里点 UI、主 DSH 关掉也能推。
+
+**新增配置项**：`notifier.kind = "feishu-app"`，字段 `appId / appSecretEnv / openId / format`；
+token 带 60 秒提前过期的进程内缓存，遇到 `99991661/99991663/99991668` 自动强刷一次再重试。

@@ -14,6 +14,13 @@
     "feishu-group": {
       "kind": "feishu-webhook",
       "url": "https://open.feishu.cn/open-apis/bot/v2/hook/REPLACE_WITH_YOUR_WEBHOOK"
+    },
+    "feishu-app": {
+      "kind": "feishu-app",
+      "appId": "cli_xxx（用 ops/set-feishu-app.mjs 自动填充）",
+      "appSecretEnv": "FEISHU_APP_SECRET",
+      "openId": "ou_xxx（机器人主人的 open id）",
+      "format": "markdown"
     }
   },
   "topics": [
@@ -21,7 +28,7 @@
       "id": "ai-news",
       "name": "AI 资讯",
       "everyMinutes": 30,
-      "notifier": "feishu-agent",
+      "notifier": "feishu-app",
       "maxItemsPerPush": 6,
       "quietHours": [
         "23:30",
@@ -57,7 +64,7 @@
       "id": "github-dsh",
       "name": "DSH 仓库动态",
       "everyMinutes": 60,
-      "notifier": "feishu-agent",
+      "notifier": "feishu-app",
       "sources": [
         {
           "kind": "github",
@@ -73,7 +80,7 @@
       "id": "price-watch",
       "name": "商品价格监控",
       "everyMinutes": 60,
-      "notifier": "feishu-agent",
+      "notifier": "feishu-app",
       "sources": [
         {
           "kind": "page",

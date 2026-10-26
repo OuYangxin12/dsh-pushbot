@@ -12,7 +12,7 @@ import path from 'node:path'
 import os from 'node:os'
 import { createRequire } from 'node:module'
 import {
-  applyFilter, buildDshImBody, buildFeishuBody, buildSummaryPrompt, cleanLlmText, fallbackSummary, formatDailyReport,
+  applyFilter, buildDshImBody, buildFeishuAppPayload, buildFeishuBody, buildSummaryPrompt, tokenFresh, cleanLlmText, fallbackSummary, formatDailyReport,
   inQuietHours, isDue, sortItems,
 } from './core.js'
 import { dueEntries, emptyOutbox, enqueue, markFailed, markSent, pendingCount } from './outbox.js'
@@ -91,7 +91,11 @@ async function notify(notifierId, notifiers, text) {
     await appendFile(localPath(notifier.path || 'data/notifications.log'), `\n## ${new Date().toISOString()}\n${text}\n`)
     return
   }
-  if (notifier.kind === 'feishu-webhook') {
+  if (notifier.kind === 'feishu-app') {
+    await sendFeishuApp(notifier, text)
+    return
+  }
+    if (notifier.kind === 'feishu-webhook') {
     const response = await request(notifier.url, {
       method: 'POST',
       headers: { 'content-type': 'application/json' },
@@ -162,6 +166,48 @@ async function summarize(topic, items, config, state) {
     log(`llm summary failed topic=${topic.id}: ${error.message}`)
     return null
   }
+}
+
+const FEISHU_API = 'https://open.feishu.cn/open-apis'
+let feishuToken = { value: null, expiresAt: 0 }
+
+async function feishuAppToken(notifier, forceRefresh = false) {
+  if (!forceRefresh && tokenFresh(feishuToken.expiresAt) && feishuToken.value) return feishuToken.value
+  const envName = notifier.appSecretEnv || 'FEISHU_APP_SECRET'
+  const secret = process.env[envName]
+  if (!secret) throw new Error(`feishu-app: 缺少凭据环境变量 ${envName}`)
+  const response = await request(`${FEISHU_API}/auth/v3/tenant_access_token/internal`, {
+    method: 'POST',
+    headers: { 'content-type': 'application/json' },
+    body: JSON.stringify({ app_id: notifier.appId, app_secret: secret }),
+  })
+  const payload = await response.json().catch(() => ({}))
+  if (payload.code !== 0 || !payload.tenant_access_token) {
+    throw new Error(`feishu-app token ${payload.code ?? '?'} ${payload.msg || ''}`.trim())
+  }
+  feishuToken = {
+    value: payload.tenant_access_token,
+    expiresAt: Date.now() + Number(payload.expire || 7200) * 1000,
+  }
+  return feishuToken.value
+}
+
+async function sendFeishuApp(notifier, text) {
+  const payload = buildFeishuAppPayload(text, notifier.format)
+  const post = async (token) => {
+    const response = await request(`${FEISHU_API}/im/v1/messages?receive_id_type=open_id`, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json', authorization: `Bearer ${token}` },
+      body: JSON.stringify({ receive_id: notifier.openId, ...payload }),
+    })
+    return await response.json().catch(() => ({}))
+  }
+  let result = await post(await feishuAppToken(notifier))
+  if ([99991661, 99991663, 99991668].includes(result.code)) {
+    feishuToken = { value: null, expiresAt: 0 }
+    result = await post(await feishuAppToken(notifier, true))
+  }
+  if (result.code !== 0) throw new Error(`feishu-app ${result.code} ${result.msg || ''}`.trim())
 }
 
 export function apply(ctx) {

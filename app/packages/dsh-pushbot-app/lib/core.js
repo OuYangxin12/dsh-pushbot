@@ -152,6 +152,26 @@ export function buildDshImBody(botId, targetId, text, format = 'markdown') {
   return body
 }
 
+/**
+ * Payload for the Feishu Open API, using the app identity (tenant token).
+ * `markdown` becomes an interactive card so headings/lists render; `plain` stays text.
+ */
+export function buildFeishuAppPayload(text, format = 'markdown') {
+  if (format === 'plain') {
+    return { msg_type: 'text', content: JSON.stringify({ text }) }
+  }
+  const card = {
+    config: { wide_screen_mode: true },
+    elements: [{ tag: 'div', text: { tag: 'lark_md', content: text } }],
+  }
+  return { msg_type: 'interactive', content: JSON.stringify(card) }
+}
+
+/** Token considered stale 60s before it actually expires. */
+export function tokenFresh(expiresAt, now = Date.now(), marginMs = 60000) {
+  return Boolean(expiresAt) && now < expiresAt - marginMs
+}
+
 export function hashText(text = '') {
   return createHash('sha256').update(String(text)).digest('hex')
 }

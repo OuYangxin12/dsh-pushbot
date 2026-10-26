@@ -26,60 +26,66 @@
 └── versions/vNNN + current     # 不可变发布版本
 ```
 
-## 0. 接入飞书（推荐：直接用你已接入的 IM 智能体）
+## 0. 当前部署状态（本机已配好）
 
-服务支持两种出口。**推荐 A**，因为你已经有一个可以对话的飞书智能体：
+| 组件 | 状态 |
+|---|---|
+| `dsh-pushbot.service` | enabled + active，开机自启，`Restart=always`，`MemoryMax=1G` |
+| `dsh-pushbot-healthcheck.timer` | 每分钟检查心跳，过期/报错/RSS 超限自动重启（带 2 分钟启动宽限） |
+| `dsh-pushbot-improve.timer` | 每天 03:00 跑一次自改进，门禁不过不发布 |
+| 推送通道 | **飞书应用直连**（复用你在 DSH 里已接入的智能体），`format=markdown` 走卡片 |
+| 凭据 | `home/feishu.env`（0600，不提交）、`home/improve.env`（0600，不提交） |
 
-| 方案 | 出口 | 特点 |
-|---|---|---|
-| **A. IM 智能体（推荐）** | dsh-im 主动投递 → 你现有的飞书机器人私聊 | 就是那个能对话的对象；消息带 Markdown；机器人连接留在主 DSH 里，不会重复建连 |
-| B. 群自定义机器人 | 飞书 webhook | 群里所有人都能看到；主 DSH 不在时也能发 |
-
-### A. 用已有的飞书智能体
-
-**第 1 步：给这个机器人建一个"投递目标"（只需点 3 下）**
-
-> DSH 主界面 → **设置 → IM机器人** → 找到飞书机器人卡片 → 右上角**齿轮** →
-> **新建目标** → 从「已聊过的会话」里选你和它的私聊 → 把 **Target ID** 改成 `feishu-me` →
-> 点**测试**（手机上会收到一条测试消息）→ **保存目标** → 点**复制调用参数**
-
-**第 2 步：告诉我 Target ID，或者自己跑**
+常用命令：
 
 ```bash
-cd ~/pushbot
-node ops/set-im.mjs --target feishu-me
+systemctl --user status dsh-pushbot          # 服务状态
+journalctl --user -u dsh-pushbot -f          # 实时日志
+cat ~/pushbot/data/health.json               # 心跳/指标
+systemctl --user list-timers 'dsh-pushbot*'  # 两个定时器
+bash ~/pushbot/ops/run-once.sh               # 立刻跑一轮
 ```
 
-`botId` 会自动从 `~/.dsh/integrations` 里发现，不用手抄；命令会先发一条测试消息，
-成功后才写配置，并把两个主题切到这个通道。
+## 0.0 飞书通道（三种，已启用第一种）
 
-**第 3 步：跑一轮真实抓取**
+| 方案 | 出口 | 依赖 | 适用 |
+|---|---|---|---|
+| **A. 飞书应用直连（已启用）** | 服务自己调飞书 Open API，发到你的智能体私聊 | 只需应用凭据 | 最独立：主 DSH 关掉也能推 |
+| B. dsh-im 主动投递 | 主 DSH 的 `/api/dsh-im/delivery/messages` | 主 DSH 必须运行 | 想复用现有连接、不想再管凭据 |
+| C. 群自定义机器人 | 飞书 webhook | 无 | 群内共享、多人都要看 |
+
+### A. 应用直连（一条命令）
 
 ```bash
-bash ops/run-once.sh
+node ops/set-feishu-app.mjs            # 自动发现机器人 + 读凭据 + 发测试 + 写配置
+node ops/set-feishu-app.mjs --format plain   # 想用纯文本而不是卡片
 ```
 
-飞书里应该马上收到消息。
+它做四件事：从 `~/.dsh/integrations` 找已接入的飞书智能体 → 从 `~/.dsh/.credentials.yaml`
+取应用密钥 → 往你的私聊发一条测试消息 → 写 `home/feishu.env`(0600) 和 `config.json`。
 
-> 注意：走 A 方案时，主 DSH 必须处于运行状态（机器人连接在它里面）。主 DSH 关掉时推送会
-> 失败并进入 outbox 重试队列，等它恢复后自动补发，不会丢。
+服务通过 systemd `EnvironmentFile` 读密钥，所以密钥不落在 `config.json` 里。
 
-### B. 用群自定义机器人（备用）
+### B. 走主 DSH 的 dsh-im
 
-飞书群 → 右上角「…」→ 设置 → 群机器人 → 添加机器人 → **自定义机器人** → 复制 webhook：
+```bash
+node ops/set-im.mjs --target <targetId>    # targetId 在 设置 → IM机器人 → 复制调用参数
+```
+
+### C. 群自定义机器人
 
 ```bash
 node ops/set-feishu.mjs 'https://open.feishu.cn/open-apis/bot/v2/hook/你的地址'
-# 开了签名校验就加： --secret 签名密钥
 ```
 
-常见报错：`code=19021` → 加 `--secret`；提到「关键词」→ 安全设置加关键词「新内容」；`code=19001` → 地址没复制完整。
+常见报错：`code=19021` → 加 `--secret`；提到「关键词」→ 安全设置加关键词「新内容」。
 
-### 第 4 步：装成常驻（普通登录终端，不是 DSH 沙箱）
+## 0.0.1 关闭 / 调整
 
 ```bash
-bash ~/pushbot/ops/install-service.sh
-systemctl --user status dsh-pushbot
+systemctl --user disable --now dsh-pushbot-improve.timer   # 暂停夜间自改进
+systemctl --user disable --now dsh-pushbot                 # 暂停推送服务
+bash ops/uninstall-service.sh                              # 彻底卸载（保留数据）
 ```
 
 ## 0.1 仓库与开发

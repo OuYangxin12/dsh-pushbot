@@ -33,7 +33,8 @@ install -m 644 "$ROOT/ops/systemd/dsh-pushbot-healthcheck.timer" "$UNIT_DIR/"
 install -m 644 "$ROOT/ops/systemd/dsh-pushbot-improve.timer" "$UNIT_DIR/"
 
 systemctl --user daemon-reload
-systemctl --user enable --now dsh-pushbot.service
+systemctl --user enable dsh-pushbot.service
+systemctl --user restart dsh-pushbot.service
 systemctl --user enable --now dsh-pushbot-healthcheck.timer
 if [ -f "$ROOT/home/improve.env" ]; then
   systemctl --user enable --now dsh-pushbot-improve.timer

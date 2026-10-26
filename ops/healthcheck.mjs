@@ -30,10 +30,17 @@ function restart(reason) {
   }
 }
 
+const startupGraceMs = Number(process.env.PUSHBOT_STARTUP_GRACE_MS || 120000)
 const health = await readJson(HEALTH, null)
 if (!health) {
   restart('missing heartbeat file')
 } else {
+  const startedAt = Date.parse(health.startedAt || 0)
+  const startedAge = Date.now() - startedAt
+  if (Number.isFinite(startedAt) && startedAge < startupGraceMs && health.phase !== 'error') {
+    log(`within startup grace (${Math.round(startedAge / 1000)}s), skipping`)
+    process.exit(0)
+  }
   const last = Date.parse(health.lastCycleAt || health.startedAt || 0)
   const age = Number.isFinite(last) ? Date.now() - last : Infinity
   if (!health.ok || health.phase === 'error') restart(`phase=${health.phase} ${health.error || ''}`)
