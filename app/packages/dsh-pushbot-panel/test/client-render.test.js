@@ -42,7 +42,13 @@ function createHarness() {
 
   const schedule = (fn) => queue.push(fn)
 
+  class ReactComponent {
+    constructor(props) { this.props = props; this.state = {} }
+    setState(next) { this.state = { ...this.state, ...(typeof next === "function" ? next(this.state) : next) }; schedule(render) }
+  }
+
   const React = {
+    Component: ReactComponent,
     createElement: (type, props, ...children) => ({ type, props: { ...(props || {}), children } }),
     useState(initial) {
       const slot = index++

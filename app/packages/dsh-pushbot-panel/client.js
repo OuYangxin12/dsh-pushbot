@@ -558,6 +558,40 @@ window.__ModuleLoader__.load({
         error && h('div', { style: S.error }, error))
     }
 
+    /**
+     * A crashed section blanks the whole settings page, which is impossible to
+     * diagnose from the UI. Catch render errors and show them instead.
+     */
+    class Boundary extends React.Component {
+      constructor(props) {
+        super(props)
+        this.state = { error: null }
+      }
+
+      static getDerivedStateFromError(error) {
+        return { error }
+      }
+
+      componentDidCatch(error) {
+        console.error('[dsh-pushbot-panel] render failed', error)
+      }
+
+      render() {
+        if (this.state.error) {
+          return h('div', { style: { padding: 20, color: 'var(--dsw-alias-state-error-primary)', fontSize: 13 } },
+            h('div', { style: { fontWeight: 600, marginBottom: 6 } }, 'Pushbot 面板渲染出错'),
+            h('div', null, String(this.state.error?.message || this.state.error)),
+            h('div', { style: { marginTop: 8, color: 'var(--dsw-alias-label-secondary)' } },
+              '把这段文字发出来即可定位；刷新页面通常会恢复。'))
+        }
+        return this.props.children
+      }
+    }
+
+    function PanelBoundary() {
+      return h(Boundary, null, h(Panel, null))
+    }
+
     return {
       inject: ['slots'],
       apply(ctx) {
@@ -567,7 +601,7 @@ window.__ModuleLoader__.load({
           order: 30,
           label: () => 'Pushbot',
           icon: 'bell',
-        }, Panel))
+        }, PanelBoundary))
       },
     }
   },
