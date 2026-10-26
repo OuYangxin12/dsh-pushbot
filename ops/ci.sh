@@ -5,9 +5,11 @@ ROOT="${PUSHBOT_ROOT:-$HOME/pushbot}"
 PKG="$ROOT/app/packages/dsh-pushbot-app"
 echo "== syntax =="
 for file in "$PKG"/lib/*.js; do node --check "$file"; done
-for script in healthcheck.mjs ensure.mjs promote.mjs gate.mjs approve.mjs freeze.mjs record-improvement.mjs set-feishu.mjs set-im.mjs set-feishu-app.mjs; do
+for script in healthcheck.mjs ensure.mjs promote.mjs gate.mjs approve.mjs freeze.mjs record-improvement.mjs set-feishu.mjs set-im.mjs set-feishu-app.mjs check-docs.mjs; do
   [ -f "$ROOT/ops/$script" ] && node --check "$ROOT/ops/$script"
 done
+echo "== docs links =="
+node "$ROOT/ops/check-docs.mjs"
 echo "== unit tests =="
 FILES=("$PKG"/test/*.test.js)
 [ -d "$ROOT/ops/test" ] && FILES+=("$ROOT"/ops/test/*.test.js)

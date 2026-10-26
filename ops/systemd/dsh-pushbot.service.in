@@ -1,6 +1,6 @@
 [Unit]
 Description=DSH pushbot — resident headless watch & notify service
-Documentation=file:%h/pushbot/README.md
+Documentation=file:%h/pushbot/docs/README.md
 After=network-online.target
 Wants=network-online.target
 StartLimitIntervalSec=0
