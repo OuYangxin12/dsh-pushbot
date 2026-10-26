@@ -1,0 +1,6 @@
+- insert:
+    - id: pushbot-panel
+      name: 'dsh-pushbot-panel'
+      config:
+        root: !!js process.getBuiltinModule('node:os').homedir() + '/pushbot'
+        unit: dsh-pushbot

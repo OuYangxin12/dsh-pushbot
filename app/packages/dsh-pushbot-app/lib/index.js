@@ -7,7 +7,7 @@
  * exponential backoff instead of being lost. Heartbeat and metrics are written
  * to data/health.json for the external watchdog; there is no HTTP server.
  */
-import { appendFile, mkdir, readFile, rename, writeFile } from 'node:fs/promises'
+import { mkdir, readFile, rename, writeFile } from 'node:fs/promises'
 import path from 'node:path'
 import os from 'node:os'
 import { createRequire } from 'node:module'
@@ -17,6 +17,8 @@ import {
 } from './core.js'
 import { dueEntries, emptyOutbox, enqueue, markFailed, markSent, pendingCount } from './outbox.js'
 import { collectSource, sourceKey } from './sources.js'
+import { fetchJson, fetchText } from './http.js'
+import { sendNotification } from './notify.js'
 
 export const name = 'dsh-pushbot'
 export const inject = ['timer']
@@ -56,160 +58,6 @@ function githubToken() {
   return process.env.GITHUB_TOKEN || process.env.GH_TOKEN || null
 }
 
-async function request(url, init = {}) {
-  const response = await fetch(url, {
-    ...init,
-    signal: AbortSignal.timeout(Number(process.env.PUSHBOT_FETCH_TIMEOUT_MS || 15000)),
-    headers: {
-      'user-agent': 'dsh-pushbot/0.2 (DeepSeek Harness resident service)',
-      ...(init.headers || {}),
-    },
-  })
-  if (!response.ok) throw new Error(`HTTP ${response.status} ${url}`)
-  return response
-}
-
-async function fetchText(url, init) {
-  return await (await request(url, init)).text()
-}
-
-async function fetchJson(url, init) {
-  return await (await request(url, init)).json()
-}
-
-function localPath(value) {
-  return path.isAbsolute(value) ? value : path.join(ROOT, value)
-}
-
-async function notify(notifierId, notifiers, text) {
-  const notifier = notifiers?.[notifierId] || { kind: 'console' }
-  if (notifier.kind === 'console') {
-    log('notify(console):', text.replace(/\n/g, ' | '))
-    return
-  }
-  if (notifier.kind === 'file') {
-    await appendFile(localPath(notifier.path || 'data/notifications.log'), `\n## ${new Date().toISOString()}\n${text}\n`)
-    return
-  }
-  if (notifier.kind === 'feishu-app') {
-    await sendFeishuApp(notifier, text)
-    return
-  }
-    if (notifier.kind === 'feishu-webhook') {
-    const response = await request(notifier.url, {
-      method: 'POST',
-      headers: { 'content-type': 'application/json' },
-      body: JSON.stringify(buildFeishuBody(text, notifier.secret)),
-    })
-    const payload = await response.json().catch(() => ({}))
-    if (payload.code && payload.code !== 0) throw new Error(`feishu webhook code ${payload.code} ${payload.msg || ''}`)
-    return
-  }
-  // Proactive delivery through the IM bot already connected to the main DSH host.
-  if (notifier.kind === 'dsh-im') {
-    const base = String(notifier.baseUrl || 'http://127.0.0.1:3081').replace(/\/$/, '')
-    const response = await request(`${base}/api/dsh-im/delivery/messages`, {
-      method: 'POST',
-      headers: { 'content-type': 'application/json' },
-      body: JSON.stringify(buildDshImBody(notifier.botId, notifier.targetId, text, notifier.format)),
-    })
-    const payload = await response.json().catch(() => ({}))
-    if (payload.sent !== true) {
-      const code = payload?.error?.code || 'delivery-failed'
-      const detail = payload?.error?.message || ''
-      throw new Error(`dsh-im ${code}${detail && detail !== code ? ': ' + detail : ''}`)
-    }
-    return
-  }
-
-  if (notifier.kind === 'webhook') {
-    await request(notifier.url, {
-      method: 'POST',
-      headers: { 'content-type': 'application/json', ...(notifier.headers || {}) },
-      body: JSON.stringify(notifier.body === undefined ? { text } : notifier.body),
-    })
-    return
-  }
-  throw new Error(`unsupported notifier kind: ${notifier.kind}`)
-}
-
-/** Optional LLM digest; returns null so the caller falls back to the rule digest. */
-async function summarize(topic, items, config, state) {
-  const llm = config.llm
-  if (!llm?.enabled) return null
-  const key = process.env[llm.apiKeyEnv || 'PUSHBOT_LLM_API_KEY'] || llm.apiKey
-  if (!key) return null
-  const day = todayKey()
-  state.llmCalls ??= {}
-  if (Number(state.llmCalls[day] || 0) >= Number(llm.maxCallsPerDay ?? 20)) {
-    log('llm budget exhausted for', day)
-    return null
-  }
-  const baseUrl = String(llm.baseUrl || 'https://api.deepseek.com').replace(/\/$/, '')
-  try {
-    const response = await request(`${baseUrl}/chat/completions`, {
-      method: 'POST',
-      headers: { 'content-type': 'application/json', authorization: `Bearer ${key}` },
-      body: JSON.stringify({
-        model: llm.model || 'deepseek-chat',
-        temperature: Number(llm.temperature ?? 0.3),
-        max_tokens: Number(llm.maxTokens ?? 700),
-        messages: [{ role: 'user', content: buildSummaryPrompt(topic, items) }],
-      }),
-    })
-    const payload = await response.json()
-    const text = cleanLlmText(payload?.choices?.[0]?.message?.content || '')
-    state.llmCalls[day] = Number(state.llmCalls[day] || 0) + 1
-    if (!text) return null
-    return `【${topic.name || topic.id}】\n${text}`
-  } catch (error) {
-    log(`llm summary failed topic=${topic.id}: ${error.message}`)
-    return null
-  }
-}
-
-const FEISHU_API = 'https://open.feishu.cn/open-apis'
-let feishuToken = { value: null, expiresAt: 0 }
-
-async function feishuAppToken(notifier, forceRefresh = false) {
-  if (!forceRefresh && tokenFresh(feishuToken.expiresAt) && feishuToken.value) return feishuToken.value
-  const envName = notifier.appSecretEnv || 'FEISHU_APP_SECRET'
-  const secret = process.env[envName]
-  if (!secret) throw new Error(`feishu-app: 缺少凭据环境变量 ${envName}`)
-  const response = await request(`${FEISHU_API}/auth/v3/tenant_access_token/internal`, {
-    method: 'POST',
-    headers: { 'content-type': 'application/json' },
-    body: JSON.stringify({ app_id: notifier.appId, app_secret: secret }),
-  })
-  const payload = await response.json().catch(() => ({}))
-  if (payload.code !== 0 || !payload.tenant_access_token) {
-    throw new Error(`feishu-app token ${payload.code ?? '?'} ${payload.msg || ''}`.trim())
-  }
-  feishuToken = {
-    value: payload.tenant_access_token,
-    expiresAt: Date.now() + Number(payload.expire || 7200) * 1000,
-  }
-  return feishuToken.value
-}
-
-async function sendFeishuApp(notifier, text) {
-  const payload = buildFeishuAppPayload(text, notifier.format)
-  const post = async (token) => {
-    const response = await request(`${FEISHU_API}/im/v1/messages?receive_id_type=open_id`, {
-      method: 'POST',
-      headers: { 'content-type': 'application/json', authorization: `Bearer ${token}` },
-      body: JSON.stringify({ receive_id: notifier.openId, ...payload }),
-    })
-    return await response.json().catch(() => ({}))
-  }
-  let result = await post(await feishuAppToken(notifier))
-  if ([99991661, 99991663, 99991668].includes(result.code)) {
-    feishuToken = { value: null, expiresAt: 0 }
-    result = await post(await feishuAppToken(notifier, true))
-  }
-  if (result.code !== 0) throw new Error(`feishu-app ${result.code} ${result.msg || ''}`.trim())
-}
-
 export function apply(ctx) {
   let disposed = false
   let running = false
@@ -247,7 +95,7 @@ export function apply(ctx) {
     const due = dueEntries(outbox, nowMs())
     for (const entry of due) {
       try {
-        await notify(entry.notifier, config.notifiers, entry.text)
+        await sendNotification(entry.notifier, config.notifiers, entry.text, { root: ROOT })
         markSent(outbox, entry.id)
         runtime.deliveries += 1
         runtime.lastDeliveryAt = new Date().toISOString()
@@ -321,6 +169,7 @@ export function apply(ctx) {
 
       for (const topic of config.topics) {
         const topicState = state.topics[topic.id] = state.topics[topic.id] || { seen: [], lastRunAt: 0, sources: {} }
+        if (topic.disabled === true) continue
         topicState.sources ??= {}
         if (!isDue(topicState, topic)) continue
         if (inQuietHours(topic)) { topicState.lastRunAt = nowMs(); continue }

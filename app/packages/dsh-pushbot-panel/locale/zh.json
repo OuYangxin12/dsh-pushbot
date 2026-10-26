@@ -1,0 +1,6 @@
+{
+  "meta": {
+    "title": "Pushbot 推送服务",
+    "description": "dsh-pushbot 常驻服务的控制面板：运行状态、抓取主题、推送通道与服务操作。"
+  }
+}

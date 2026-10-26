@@ -25,6 +25,7 @@ github release/commit · 网页变更与断言
 - **飞书三种接法**：应用直连（最独立）、dsh-im 主动投递、群自定义机器人
 - **可自愈**：每分钟心跳检查，僵尸进程与 RSS 超限都会自动重启
 - **可回滚**：版本化发布 + 健康门禁 + 自动回滚，失败不留残局
+- **带控制面板**：DSH 设置里的 Pushbot 页面可看状态、改主题、测试推送、重启服务
 
 ## 快速开始
 
@@ -47,6 +48,7 @@ bash ops/run-once.sh
 |---|---|
 | [docs/getting-started.md](docs/getting-started.md) | 安装、服务管理、手动运行、卸载 |
 | [docs/channels.md](docs/channels.md) | 三种飞书接法、webhook、报错码 |
+| [docs/panel.md](docs/panel.md) | 控制面板：看到什么、能改什么、能做什么 |
 | [docs/configuration.md](docs/configuration.md) | 配置全字段、抓取源、LLM 摘要、日报 |
 | [docs/reliability.md](docs/reliability.md) | 投递队列、去重、心跳与自愈 |
 | [docs/operations.md](docs/operations.md) | 日常命令、排障、安全边界 |

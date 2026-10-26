@@ -1,0 +1,6 @@
+{
+  "meta": {
+    "title": "Pushbot",
+    "description": "Control panel for the dsh-pushbot service: status, topics, delivery channels and service actions."
+  }
+}
