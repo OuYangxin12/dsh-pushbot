@@ -11,9 +11,13 @@ import { mkdir, readFile, rename, writeFile } from 'node:fs/promises'
 import os from 'node:os'
 import path from 'node:path'
 import { promisify } from 'node:util'
+import { IMPROVE_POLICIES, SOURCE_KINDS, validateConfig } from './schema.js'
 
 export const name = 'dsh-pushbot-panel'
 export const inject = ['webServer', 'connection']
+
+/** Bumped whenever the panel's host/client contract changes. */
+const SCHEMA_VERSION = 2
 
 const run = promisify(execFile)
 const BASE = '/api/dsh-pushbot'
@@ -42,6 +46,13 @@ export function apply(ctx, config = {}) {
     }
   }
 
+  // Diagnostics marker: lets the operator confirm which host build is loaded.
+  void writeJson(path.join(dataDir, 'panel-host.json'), {
+    schemaVersion: SCHEMA_VERSION,
+    appliedAt: new Date().toISOString(),
+    pid: process.pid,
+  }).catch(() => {})
+
   async function serviceState() {
     const show = await systemctl(['show', '-p', 'ActiveState', '-p', 'SubState', '-p', 'MainPID', '-p', 'NRestarts', unit])
     const fields = Object.fromEntries(show.split('\n').filter(Boolean).map((line) => {
@@ -65,7 +76,7 @@ export function apply(ctx, config = {}) {
   }
 
   async function overview() {
-    const [config, health, state, outbox, deploys, improvements, service] = await Promise.all([
+    const [diskConfig, health, state, outbox, deploys, improvements, service] = await Promise.all([
       readJson(configPath, { topics: [], notifiers: {} }),
       readJson(path.join(dataDir, 'health.json'), null),
       readJson(path.join(dataDir, 'state.json'), { topics: {}, history: [] }),
@@ -74,75 +85,48 @@ export function apply(ctx, config = {}) {
       readJson(path.join(dataDir, 'improvements.json'), []),
       serviceState(),
     ])
-    const topics = (config.topics || []).map((topic) => {
+    const topics = (diskConfig.topics || []).map((topic) => {
       const topicState = state?.topics?.[topic.id] || {}
       return {
         id: topic.id,
-        name: topic.name || topic.id,
-        everyMinutes: Number(topic.everyMinutes ?? 30),
-        notifier: topic.notifier || 'console',
-        disabled: topic.disabled === true,
-        quietHours: topic.quietHours || null,
-        sources: (topic.sources || []).map((source) => source.kind),
-        sourceCount: (topic.sources || []).length,
         lastRunAt: topicState.lastRunAt || null,
         seen: (topicState.seen || []).length,
+        sourceCount: (topic.sources || []).length,
       }
     })
     const lastDeploy = (deploys || []).filter((row) => row.action === 'deploy').at(-1) || null
-    const lastImprovement = (improvements || []).at(-1) || null
     return {
+      schemaVersion: SCHEMA_VERSION,
       root,
       configPath,
       service,
       health,
       topics,
-      notifiers: Object.entries(config.notifiers || {}).map(([id, row]) => ({ id, kind: row.kind })),
-      llm: { enabled: Boolean(config.llm?.enabled) },
-      dailyReport: config.dailyReport || null,
+      config: diskConfig,
+      catalog: {
+        sourceKinds: Object.entries(SOURCE_KINDS).map(([kind, meta]) => ({ kind, label: meta.label, fields: meta.fields })),
+        improvePolicies: IMPROVE_POLICIES,
+      },
       outbox: { pending: (outbox.pending || []).length, dead: (outbox.dead || []).length },
       recent: (state?.history || []).slice(-12).reverse(),
       lastDeploy,
-      lastImprovement,
+      lastImprovement: (improvements || []).at(-1) || null,
     }
   }
 
-  /** Normalise a topic patch without trusting the panel for anything structural. */
-  function applyTopicPatch(config, patch) {
-    const byId = new Map((config.topics || []).map((topic) => [topic.id, topic]))
-    for (const change of patch.topics || []) {
-      const topic = byId.get(change.id)
-      if (!topic) continue
-      if (typeof change.disabled === 'boolean') {
-        if (change.disabled) topic.disabled = true
-        else delete topic.disabled
-      }
-      if (Number.isFinite(Number(change.everyMinutes))) {
-        topic.everyMinutes = Math.max(1, Math.min(1440, Math.round(Number(change.everyMinutes))))
-      }
-      if (typeof change.notifier === 'string' && config.notifiers?.[change.notifier]) {
-        topic.notifier = change.notifier
-      }
-    }
-  }
-
-  async function act(action, payload) {
-    if (action === 'run-once') {
-      run('bash', [path.join(root, 'ops', 'run-once.sh')], {
-        timeout: 120000,
-        env: { ...process.env, PUSHBOT_ROOT: root },
-      }).catch(() => {})
+  async function action(name) {
+    if (name === 'run-once') {
+      run('bash', [path.join(root, 'ops', 'run-once.sh')], { timeout: 120000, env: { ...process.env, PUSHBOT_ROOT: root } }).catch(() => {})
       return { started: true, hint: '抓取已触发，约 10–30 秒后刷新状态' }
     }
-    if (action === 'restart') {
+    if (name === 'restart') {
       await systemctl(['restart', unit])
       return { started: true, hint: '服务已重启' }
     }
-    if (action === 'test-push') {
+    if (name === 'test-push') {
       try {
         const { stdout } = await run('node', [path.join(root, 'ops', 'test-push.mjs')], {
-          timeout: 30000,
-          env: { ...process.env, PUSHBOT_ROOT: root },
+          timeout: 30000, env: { ...process.env, PUSHBOT_ROOT: root },
         })
         return { ok: true, output: stdout.trim().split('\n').slice(-4).join('\n') }
       } catch (error) {
@@ -153,14 +137,11 @@ export function apply(ctx, config = {}) {
         }
       }
     }
-    if (action === 'improve') {
-      run('bash', [path.join(root, 'ops', 'improve.sh')], {
-        timeout: 1800000,
-        env: { ...process.env, PUSHBOT_ROOT: root },
-      }).catch(() => {})
+    if (name === 'improve') {
+      run('bash', [path.join(root, 'ops', 'improve.sh')], { timeout: 1800000, env: { ...process.env, PUSHBOT_ROOT: root } }).catch(() => {})
       return { started: true, hint: '自改进已触发，结果见 data/improve.log' }
     }
-    throw Object.assign(new Error(`未知操作：${action}`), { status: 400 })
+    throw Object.assign(new Error(`未知操作：${name}`), { status: 400 })
   }
 
   const json = (res, status, value) => {
@@ -168,7 +149,7 @@ export function apply(ctx, config = {}) {
     res.end(JSON.stringify(value))
   }
 
-  const readBody = async (req, limit = 256 * 1024) => {
+  const readBody = async (req, limit = 512 * 1024) => {
     const chunks = []
     let size = 0
     for await (const chunk of req) {
@@ -195,8 +176,10 @@ export function apply(ctx, config = {}) {
 
   const writeGuard = (req, res) => {
     if (req.method === 'GET') return true
-    const type = String(req.headers['content-type'] || '')
-    if (!type.includes('application/json')) { json(res, 415, { error: 'content-type must be application/json' }); return false }
+    if (!String(req.headers['content-type'] || '').includes('application/json')) {
+      json(res, 415, { error: 'content-type must be application/json' })
+      return false
+    }
     return true
   }
 
@@ -221,17 +204,18 @@ export function apply(ctx, config = {}) {
 
   route('/config', async (req, res) => {
     if (req.method !== 'POST') return json(res, 405, { error: 'method not allowed' })
-    const patch = await readBody(req)
-    const config = await readJson(configPath, null)
-    if (!config) return json(res, 409, { error: `读不到 ${configPath}` })
-    applyTopicPatch(config, patch)
-    await writeJson(configPath, config)
-    json(res, 200, { ok: true })
+    const body = await readBody(req)
+    const previous = await readJson(configPath, null)
+    if (!previous) return json(res, 409, { error: `读不到 ${configPath}` })
+    const { errors, config: next } = validateConfig(body.config, { previous })
+    if (!next) return json(res, 422, { error: errors.join('；'), errors })
+    await writeJson(configPath, next)
+    json(res, 200, { ok: true, config: next, warnings: errors })
   })
 
   route('/action', async (req, res) => {
     if (req.method !== 'POST') return json(res, 405, { error: 'method not allowed' })
     const body = await readBody(req)
-    json(res, 200, await act(String(body.action || ''), body))
+    json(res, 200, await action(String(body.action || '')))
   })
 }

@@ -39,6 +39,21 @@ node ops/approve.mjs reject <id> --note "理由"
 
 请求会通过已配置的通知器推送；批准记录写在 `data/approvals/<id>.json`。
 
+## 自治级别
+
+`config.json` 的 `automation.improve` 决定门禁通过后的行为（也可在控制面板「偏好」里改）：
+
+| 值 | 行为 |
+|---|---|
+| `auto` | 低风险改动自动 build + promote |
+| `approval` | 一律转人工批准，即使门禁判定为 pass |
+| `off` | 定时任务直接退出，不做任何改动 |
+
+```bash
+# 临时演练：不跑模型，只走到门禁
+PUSHBOT_IMPROVE_DRY_RUN=1 bash ops/improve.sh
+```
+
 ## 凭据
 
 改进器跑在独立 `DSH_HOME`，需要自己的模型密钥：

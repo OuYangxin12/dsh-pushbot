@@ -21,6 +21,14 @@ fi
 
 cd "$ROOT" || exit 1
 
+# automation.improve: auto (default) | approval (never auto-deploy) | off (skip)
+POLICY=$(node -e 'try{const c=require(process.argv[1]);process.stdout.write(String(c?.automation?.improve||"auto"))}catch{process.stdout.write("auto")}' "$ROOT/config.json" 2>/dev/null || echo auto)
+case "$POLICY" in
+  off) log "automation.improve=off: skipping this run"; exit 0 ;;
+  auto|approval) log "automation.improve=$POLICY" ;;
+  *) log "unknown automation.improve=$POLICY, treating as auto"; POLICY=auto ;;
+esac
+
 if ! node ops/freeze.mjs --verify >>"$LOG" 2>&1; then
   log "aborted: bootstrap drift detected (ops/ was modified)"
   exit 1
@@ -64,6 +72,10 @@ GATE_JSON=$(node ops/gate.mjs --diff-base "$BASE" --json)
 GATE_EXIT=$?
 printf '%s\n' "$GATE_JSON" >>"$LOG"
 VERDICT=$(printf '%s' "$GATE_JSON" | node -e 'let s="";process.stdin.on("data",d=>s+=d).on("end",()=>{try{console.log(JSON.parse(s).verdict)}catch{console.log("unknown")}})')
+if [ "$POLICY" = "approval" ] && [ "$VERDICT" = "pass" ]; then
+  VERDICT=approval
+  log "policy=approval: downgrading an auto-deployable change to a human-approval request"
+fi
 log "gate verdict=$VERDICT exit=$GATE_EXIT"
 
 record() {

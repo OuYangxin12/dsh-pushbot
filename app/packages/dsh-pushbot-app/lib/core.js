@@ -48,6 +48,29 @@ export function parseFeed(xml) {
   return items
 }
 
+/** Read `a.b.0.c` out of a parsed JSON value; returns undefined on a miss. */
+export function pathGet(value, dotted) {
+  if (!dotted) return value
+  return String(dotted).split('.').reduce((node, key) => {
+    if (node === null || node === undefined) return undefined
+    return node[key]
+  }, value)
+}
+
+/** First capture group of `re` in `text`, else the whole match, else undefined. */
+export function firstGroup(re, text) {
+  if (!re) return undefined
+  const match = String(text).match(new RegExp(re, 'is'))
+  if (!match) return undefined
+  return (match[1] ?? match[0] ?? '').trim()
+}
+
+/** Resolve an href found inside a page against that page's URL. */
+export function absoluteUrl(href, base) {
+  if (!href) return undefined
+  try { return new URL(href, base).toString() } catch { return href }
+}
+
 export function minutesOfDay(hhmm) {
   const [hour, minute] = String(hhmm).split(':').map(Number)
   return (hour || 0) * 60 + (minute || 0)

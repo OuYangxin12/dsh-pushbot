@@ -3,8 +3,8 @@
  * `fetchJson` so the adapters stay unit-testable without network access.
  */
 import {
-  parseFeed, parseHnItem, parseHnSearch, parseV2ex,
-  normalizePage, hashText, stripTags,
+  absoluteUrl, firstGroup, hashText, normalizePage, parseFeed, parseHnItem,
+  parseHnSearch, parseV2ex, pathGet, stripTags,
 } from './core.js'
 
 export function sourceKey(source) {
@@ -80,6 +80,74 @@ async function collectHnSearch(source, { fetchJson, now }) {
 async function collectV2ex(source, { fetchJson }) {
   const json = await fetchJson(source.endpoint || 'https://www.v2ex.com/api/topics/hot.json')
   return parseV2ex(json, label(source, 'V2EX')).slice(0, Number(source.limit ?? 8))
+}
+
+/**
+ * Generic HTML list: split the page into blocks with `item`, then pull
+ * `title` / `link` / `date` out of each block with regexes.
+ * No DOM, no dependencies — one regex per field keeps arbitrary sites reachable.
+ */
+async function collectHtmlList(source, { fetchText }) {
+  const html = await fetchText(source.url)
+  const limit = Number(source.limit ?? 10)
+  const blocks = source.item
+    ? [...html.matchAll(new RegExp(source.item, 'gis'))].map((match) => match[1] ?? match[0])
+    : [html]
+  const items = []
+  for (const block of blocks) {
+    const title = stripTags(firstGroup(source.title, block) || '')
+    if (!title) continue
+    const href = firstGroup(source.link, block)
+    items.push({
+      id: `${source.url}|${href || title}`,
+      title,
+      url: absoluteUrl(href, source.url),
+      summary: stripTags(firstGroup(source.summary, block) || '').slice(0, 200),
+      source: label(source, 'page'),
+    })
+    if (items.length >= limit) break
+  }
+  return items
+}
+
+/** Generic JSON API: point at an array and map fields with dotted paths. */
+async function collectJsonApi(source, { fetchJson }) {
+  const json = await fetchJson(source.url, source.headers ? { headers: source.headers } : undefined)
+  const rows = pathGet(json, source.itemsPath)
+  if (!Array.isArray(rows)) throw new Error('json-api: itemsPath is not an array')
+  const limit = Number(source.limit ?? 10)
+  return rows.slice(0, limit).map((row, index) => {
+    const title = String(pathGet(row, source.titlePath ?? 'title') ?? '').trim()
+    const href = pathGet(row, source.urlPath ?? 'url')
+    return {
+      id: `${source.url}|${pathGet(row, source.idPath ?? 'id') ?? title ?? index}`,
+      title,
+      url: href ? absoluteUrl(String(href), source.url) : undefined,
+      date: pathGet(row, source.datePath ?? '') || undefined,
+      summary: stripTags(String(pathGet(row, source.summaryPath ?? '') ?? '')).slice(0, 200),
+      source: label(source, 'api'),
+    }
+  }).filter((item) => item.title)
+}
+
+/** GitHub repository search, e.g. trending: created in the last N days sorted by stars. */
+async function collectGithubSearch(source, { fetchJson, token, now }) {
+  const days = Number(source.sinceDays ?? 7)
+  const since = new Date(now - days * 86400000).toISOString().slice(0, 10)
+  const query = String(source.query || 'stars:>100').replaceAll('{since}', since)
+  const limit = Number(source.limit ?? 5)
+  const headers = { accept: 'application/vnd.github+json' }
+  if (token) headers.authorization = `Bearer ${token}`
+  const url = `https://api.github.com/search/repositories?q=${encodeURIComponent(query)}&sort=${source.sort || 'stars'}&order=desc&per_page=${limit}`
+  const json = await fetchJson(url, { headers })
+  return (json.items || []).map((row) => ({
+    id: `gh-repo:${row.full_name}`,
+    title: `${row.full_name} ★${row.stargazers_count} — ${row.description || ''}`.slice(0, 140),
+    url: row.html_url,
+    date: row.pushed_at,
+    summary: String(row.description || '').slice(0, 200),
+    source: label(source, 'GitHub'),
+  }))
 }
 
 /**
@@ -167,6 +235,12 @@ export async function collectSource(source, deps = {}) {
       return { items: await collectHnSearch(source, deps) }
     case 'v2ex':
       return { items: await collectV2ex(source, deps) }
+    case 'html-list':
+      return { items: await collectHtmlList(source, deps) }
+    case 'json-api':
+      return { items: await collectJsonApi(source, deps) }
+    case 'github-search':
+      return { items: await collectGithubSearch(source, { ...deps, now }) }
     case 'page':
       return await collectPage(source, { ...deps, previous, now })
     default:

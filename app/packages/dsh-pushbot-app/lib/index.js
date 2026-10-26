@@ -12,12 +12,12 @@ import path from 'node:path'
 import os from 'node:os'
 import { createRequire } from 'node:module'
 import {
-  applyFilter, buildDshImBody, buildFeishuAppPayload, buildFeishuBody, buildSummaryPrompt, tokenFresh, cleanLlmText, fallbackSummary, formatDailyReport,
-  inQuietHours, isDue, sortItems,
+  applyFilter, buildSummaryPrompt, cleanLlmText, fallbackSummary,
+  formatDailyReport, inQuietHours, isDue, sortItems,
 } from './core.js'
 import { dueEntries, emptyOutbox, enqueue, markFailed, markSent, pendingCount } from './outbox.js'
 import { collectSource, sourceKey } from './sources.js'
-import { fetchJson, fetchText } from './http.js'
+import { fetchJson, fetchText, request } from './http.js'
 import { sendNotification } from './notify.js'
 
 export const name = 'dsh-pushbot'
@@ -56,6 +56,41 @@ async function writeJsonAtomic(file, value) {
 
 function githubToken() {
   return process.env.GITHUB_TOKEN || process.env.GH_TOKEN || null
+}
+
+/** Optional LLM digest; returns null so the caller falls back to the rule digest. */
+async function summarize(topic, items, config, state) {
+  const llm = config.llm
+  if (!llm?.enabled) return null
+  const key = process.env[llm.apiKeyEnv || 'PUSHBOT_LLM_API_KEY'] || llm.apiKey
+  if (!key) return null
+  const day = todayKey()
+  state.llmCalls ??= {}
+  if (Number(state.llmCalls[day] || 0) >= Number(llm.maxCallsPerDay ?? 20)) {
+    log('llm budget exhausted for', day)
+    return null
+  }
+  const baseUrl = String(llm.baseUrl || 'https://api.deepseek.com').replace(/\/$/, '')
+  try {
+    const response = await request(`${baseUrl}/chat/completions`, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json', authorization: `Bearer ${key}` },
+      body: JSON.stringify({
+        model: llm.model || 'deepseek-chat',
+        temperature: Number(llm.temperature ?? 0.3),
+        max_tokens: Number(llm.maxTokens ?? 700),
+        messages: [{ role: 'user', content: buildSummaryPrompt(topic, items) }],
+      }),
+    })
+    const payload = await response.json()
+    const text = cleanLlmText(payload?.choices?.[0]?.message?.content || '')
+    state.llmCalls[day] = Number(state.llmCalls[day] || 0) + 1
+    if (!text) return null
+    return `【${topic.name || topic.id}】\n${text}`
+  } catch (error) {
+    log(`llm summary failed topic=${topic.id}: ${error.message}`)
+    return null
+  }
 }
 
 export function apply(ctx) {

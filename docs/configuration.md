@@ -57,7 +57,29 @@
 | `hackernews` | `limit` | HN 首页热榜，官方 Firebase API |
 | `hn-search` | `query`、`sinceDays`、`limit` | HN 关键词搜索，按时间倒序 |
 | `v2ex` | `limit`、`endpoint?` | V2EX 热帖 |
+| `github-search` | `query`、`sinceDays`、`sort`、`limit` | GitHub 仓库搜索，`{since}` 会替换成 N 天前的日期（做"最近热门"用） |
 | `page` | `url`、`region?`、`expect?` | 网页变更或断言监控 |
+| `html-list` | `url`、`item`、`title`、`link?`、`summary?`、`limit` | **任意网页列表**：用正则切块再提字段，无需写代码 |
+| `json-api` | `url`、`itemsPath`、`titlePath`、`urlPath`、`idPath?`、`datePath?`、`summaryPath?`、`limit` | **任意 JSON 接口**：点号路径映射字段 |
+
+### 通用源怎么配
+
+`html-list` 用三段正则：`item` 切出条目块，`title` / `link` 在块内提取（第一个捕获组生效）。
+
+```json
+{ "kind": "html-list", "url": "https://example.com/news",
+  "item": "<li>([\\s\\S]*?)</li>",
+  "title": "<h2>([\\s\\S]*?)</h2>",
+  "link": "href=\"([^\"]+)\"", "limit": 10 }
+```
+
+`json-api` 用点号路径，数组下标也可以（`data.list.0.title`）：
+
+```json
+{ "kind": "json-api", "url": "https://api.example.com/items",
+  "itemsPath": "data.list", "titlePath": "title", "urlPath": "link",
+  "idPath": "id", "datePath": "created", "limit": 10 }
+```
 
 ### page 的两种用法
 
@@ -92,6 +114,20 @@
 ```
 
 每天该时刻生成 `data/reports/YYYY-MM-DD.md`，并把摘要推一份。
+
+## automation（可选）
+
+```json
+"automation": { "improve": "auto" }
+```
+
+| 值 | 含义 |
+|---|---|
+| `auto`（默认） | 门禁通过就自动发布 |
+| `approval` | 永不自动发布，一律转人批 |
+| `off` | 夜间不跑自改进 |
+
+冻结校验与机械门禁始终生效，这个开关只决定"通过门禁之后"是否自动上线。
 
 ## 环境变量
 
